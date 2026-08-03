@@ -1,0 +1,77 @@
+{% load static %}<!doctype html>
+<html lang="en" data-theme="{{ request.COOKIES.theme|default:'' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SMTI HUB{% endblock %}</title>
+  <link rel="icon" href="{% static 'hub/favicon.svg' %}" type="image/svg+xml">
+  <link rel="stylesheet" href="{% static 'hub/app.css' %}">
+  <script defer src="{% static 'hub/hub.js' %}"></script>
+</head>
+<body>
+{% include "hub/_icons.html" %}
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark">Security Monitoring &amp;<br>Threat Intelligence</div>
+      <div class="brand-name">SMTI HUB</div>
+    </div>
+    <nav class="nav">
+      {% if is_manager %}
+        <div class="nav-label">Manager</div>
+        <a href="{% url 'team' %}"><button {% if screen == 'team' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-team"></use></svg>Team</button></a>
+        <a href="{% url 'goals' %}"><button {% if screen == 'goals' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-goals"></use></svg>Goals</button></a>
+        <a href="{% url 'tasks' %}"><button {% if screen == 'tasks' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-tasks"></use></svg>Tasks<span class="badge {% if pending_count %}on{% endif %}">{{ pending_count }}</span></button></a>
+        <a href="{% url 'year_summary' %}"><button {% if screen == 'summary' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-summary"></use></svg>Year summary</button></a>
+        <a href="{% url 'activity' %}"><button {% if screen == 'activity' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-activity"></use></svg>Activity</button></a>
+      {% endif %}
+      <div class="nav-label">{% if is_manager %}Analyst view{% else %}My record{% endif %}</div>
+      <a href="{% url 'my_appraisal' %}"><button {% if screen == 'mine' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-mine"></use></svg>My appraisal</button></a>
+      <a href="{% url 'my_tasks' %}"><button {% if screen == 'mytasks' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-mytasks"></use></svg>My tasks</button></a>
+      <div class="nav-label">Account</div>
+      <a href="{% url 'settings' %}"><button {% if screen == 'settings' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-settings"></use></svg>Settings</button></a>
+    </nav>
+    <div class="side-foot">
+      <div class="who">
+        <div class="avatar">{{ me.initials|default:"??" }}</div>
+        <div>
+          <div class="who-name">{{ me.name|default:user.get_username }}</div>
+          <div class="who-role">{% if is_manager %}Manager{% else %}{{ me.job_title|default:"Analyst" }}{% endif %}</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div class="crumb">{% block crumb %}<b>{{ heading|default:"SMTI HUB" }}</b>{% endblock %}</div>
+        <div class="spacer"></div>
+        {% if open_year %}
+          <span class="pill mono">{{ open_year.label }}</span>
+          {% if open_year.closed %}
+            <span class="pill closed mono"><svg class="ic-xs" aria-hidden="true"><use href="#i-lock"></use></svg>Closed</span>
+          {% else %}
+            <span class="pill open mono">Open</span>
+          {% endif %}
+        {% endif %}
+        <form method="post" action="{% url 'logout' %}" style="margin:0">{% csrf_token %}
+          <button class="btn sm ghost" type="submit">Sign out</button>
+        </form>
+      </div>
+    </div>
+    <div class="page">
+      {% if messages %}
+        {% for message in messages %}
+          <div class="notice {% if message.tags == 'error' %}bad{% else %}good{% endif %}">
+            <svg class="ic-sm" aria-hidden="true"><use href="#i-{% if message.tags == 'error' %}alert{% else %}check{% endif %}"></use></svg>
+            <span>{{ message }}</span>
+          </div>
+        {% endfor %}
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+</body>
+</html>

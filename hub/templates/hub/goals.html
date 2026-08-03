@@ -1,0 +1,65 @@
+{% extends "hub/base.html" %}{% load hub_extras %}
+{% block title %}Goals — SMTI HUB{% endblock %}
+{% block crumb %}<b>Goals</b>{% endblock %}
+{% block content %}
+<h1>Goals</h1>
+<p class="sub">Define what the team is measured on this year, and who each goal applies to.</p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-k">Goals</div><div class="stat-v">{{ rows|length }}</div>
+    <div class="stat-n">{{ year.label }}</div></div>
+  <div class="stat"><div class="stat-k">KPIs</div><div class="stat-v">{{ kpi_count }}</div>
+    <div class="stat-n">{{ auto_count }} scored from tasks</div></div>
+  <div class="stat"><div class="stat-k">Total marks</div><div class="stat-v">{{ total_marks }}</div>
+    <div class="stat-n">need not be 100</div></div>
+  <div class="stat"><div class="stat-k">Add a goal</div>
+    <div class="stat-v" style="font-size:15px;padding-top:6px">
+      <a href="{% url 'goal_new' %}"><button class="btn primary">+ New goal</button></a></div>
+    <div class="stat-n">applies from the next unscored month</div></div>
+</div>
+
+<div class="cols wide">
+{% for row in rows %}
+  <div class="card goal-card">
+    <div class="gc-head">
+      <div class="gc-title"><span class="gc-id">{{ row.goal.code }}</span>
+        <span class="gc-name">{{ row.goal.name }}</span>
+        <span class="spacer" style="flex:1"></span>
+        <span class="tag mono">{{ row.marks }} marks</span>
+        <a href="{% url 'goal_edit' row.goal.pk %}"><button class="btn sm">Edit</button></a></div>
+      {% if row.goal.description %}<div class="gc-desc">{{ row.goal.description }}</div>{% endif %}
+      <div class="gc-assign">
+        <span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600">Assigned</span>
+        {% for person in team %}
+          <span class="chip {% if person not in row.assigned %}off{% endif %}">
+            <span class="avatar">{{ person.initials }}</span>{{ person.name }}</span>
+        {% empty %}
+          <span style="font-size:12px;color:var(--faint)">No analysts yet —
+            <a href="{% url 'employee_new' %}">add one</a> to assign this goal.</span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="tw"><table class="gc-kpis"><tbody>
+      {% for kpi in row.kpis %}
+        <tr>
+          <td style="width:44px"><span class="mono" style="font-weight:600;color:var(--accent)">{{ kpi.code }}</span></td>
+          <td>{{ kpi.text }}</td>
+          <td style="width:96px"><span class="mode-tag {% if kpi.scoring_mode == 'from_tasks' %}auto{% endif %}">
+            {% if kpi.scoring_mode == 'from_tasks' %}from tasks{% else %}manual{% endif %}</span></td>
+          <td style="width:70px">{% if kpi.quarterly %}<span class="tag q mono">quarterly</span>{% endif %}</td>
+          <td class="num" style="width:60px;color:var(--muted)">{{ kpi.max_marks }}</td>
+        </tr>
+      {% endfor %}
+    </tbody></table></div>
+    {% if row.locked %}
+      <div class="locked-note"><svg class="ic-xs" aria-hidden="true"><use href="#i-lock"></use></svg><span>Scores exist against this goal. Wording and
+        assignment can still change; marks, quarterly flag and scoring method are locked for the
+        rest of the year.</span></div>
+    {% endif %}
+  </div>
+{% endfor %}
+</div>
+
+<p class="foot-note"><b>Assignment changes who is measured.</b> A goal assigned to three of five
+analysts is excluded from the other two entirely — it does not count against them as a zero.</p>
+{% endblock %}

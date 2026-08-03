@@ -1,0 +1,86 @@
+{% extends "hub/base.html" %}{% load hub_extras %}
+{% block title %}Score entry — SMTI HUB{% endblock %}
+{% block crumb %}<a href="{% url 'team' %}" style="color:var(--muted)">Team</a> /
+  <b>{{ employee.name }}</b> / {{ months|index:month|index:1 }}{% endblock %}
+{% block content %}
+<h1>Score entry</h1>
+<p class="sub">{{ employee.name }} · {{ employee.job_title }}</p>
+
+{% if frozen %}
+  <div class="notice"><svg class="ic-sm" aria-hidden="true"><use href="#i-lock"></use></svg><span><b>This month is scored and frozen.</b>
+    Task-derived marks were snapshotted at close, so no task change can move them.
+    <a href="{% url 'month_reopen' employee.pk month %}">Reopen this month</a> to record a
+    correction — the reopen is audited and needs a reason.</span></div>
+{% elif not quarter_end %}
+  <div class="notice"><svg class="ic-sm" aria-hidden="true"><use href="#i-clock"></use></svg><span><b>Not a quarter end.</b>
+    Quarterly KPIs are locked and excluded from this month's total — the maximum is
+    {{ summary.maximum }}, not 100.</span></div>
+{% endif %}
+
+<div class="card">
+  <div class="months">
+    {% for i, label in months %}
+      <a href="{% url 'score_entry' employee.pk i %}"><button
+        class="{% if i == 1 or i == 4 or i == 7 or i == 10 %}qe{% endif %}"
+        aria-selected="{% if i == month %}true{% else %}false{% endif %}">{{ label }}{% if i in complete_months %}<span class="dot"></span>{% endif %}</button></a>
+    {% endfor %}
+  </div>
+
+  <div class="tw" id="scoreGrid"
+       data-save-url="{% url 'score_save' employee.pk month %}"
+       data-csrf="{{ csrf_token }}">
+    <table><tbody>
+    {% for group in groups %}
+      <tr class="goal-row"><td colspan="4">
+        <span class="goal-code">{{ group.goal.code }}</span>
+        <span class="goal-name">{{ group.goal.name }}</span>
+        <span class="tag mono" style="margin-left:8px">{{ group.marks }} marks</span></td></tr>
+      {% for row in group.rows %}
+        <tr class="{% if not row.eligible %}row-locked{% endif %}">
+          <td style="width:56px;vertical-align:top;padding-top:14px">
+            <span class="mono" style="font-weight:600;color:var(--accent)">{{ row.kpi.code }}</span></td>
+          <td><div class="kpi-text">{{ row.kpi.text }}</div>
+            {% if row.kpi.quarterly %}<div class="kpi-sub">Quarterly — Jun, Sep, Dec, Mar only</div>{% endif %}
+            {% if row.auto and row.eligible %}
+              <div class="kpi-sub">Scored from approved tasks — {{ row.approved_weight }}% of
+                {{ row.total_weight }}% weight approved{% if not row.tasks %} · no tasks this month, so the month cannot be completed{% endif %}</div>
+              {% for t in row.tasks %}
+                <div class="subtask">
+                  <span class="st {{ t.status|status_class }}" style="font-size:10px;padding:1px 7px">{{ t.get_status_display }}</span>
+                  <span style="flex:1;min-width:0">{{ t.title }}</span>
+                  <span class="w">weight {{ t.weight }}%</span></div>
+              {% endfor %}
+            {% endif %}
+          </td>
+          <td class="num" style="width:80px;color:var(--faint);vertical-align:top;padding-top:14px">/ {{ row.kpi.max_marks }}</td>
+          <td style="width:140px;text-align:right;vertical-align:top;padding-top:10px">
+            {% if not row.eligible %}
+              <span class="tag q mono">{{ row.reason }}</span>
+            {% elif row.auto %}
+              {% if row.tasks %}
+                <span class="computed">{{ row.value|floatformat:"-1" }} <span class="of">of {{ row.kpi.max_marks }}</span></span>
+              {% else %}
+                <span class="tag mono" style="color:var(--warn)">needs tasks</span>
+              {% endif %}
+            {% elif frozen %}
+              <span class="computed">{{ row.value|floatformat:"-1"|default:"—" }}</span>
+            {% else %}
+              <input type="number" min="0" max="{{ row.kpi.max_marks }}" step="0.5"
+                     value="{{ row.value|floatformat:'-1'|default_if_none:'' }}"
+                     data-kpi="{{ row.kpi.pk }}" data-max="{{ row.kpi.max_marks }}"
+                     aria-label="{{ row.kpi.code }} score">
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    {% endfor %}
+    </tbody></table>
+  </div>
+  {% include "hub/_saveline.html" %}
+</div>
+
+<p class="foot-note"><b>What this screen enforces:</b> a mark above a KPI's maximum is rejected
+server-side, quarterly KPIs cannot be scored outside their quarter, and each save carries the
+timestamp it loaded with — a second tab editing the same cell gets a conflict rather than
+silently overwriting. Every change writes an audit row.</p>
+{% endblock %}

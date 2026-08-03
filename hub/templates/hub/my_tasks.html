@@ -1,0 +1,26 @@
+{% extends "hub/base.html" %}
+{% block title %}My tasks — SMTI HUB{% endblock %}
+{% block crumb %}<b>My tasks</b>{% endblock %}
+{% block content %}
+<h1>My tasks</h1>
+<p class="sub">{{ me.name }}</p>
+<div class="cols">
+  <div class="card">
+    <div class="card-head"><span class="card-title">Open</span>
+      <span class="card-note">{{ open_tasks|length }} to do</span></div>
+    {% for item in open_tasks %}{% include "hub/_task.html" with mine=1 %}{% empty %}
+      <div style="padding:26px 18px;text-align:center;color:var(--faint);font-size:13px">All clear.</div>
+    {% endfor %}
+  </div>
+  <div class="card">
+    <div class="card-head"><span class="card-title">Approved</span>
+      <span class="card-note">{{ done_tasks|length }} confirmed by your manager</span></div>
+    {% for item in done_tasks %}{% include "hub/_task.html" with mine=1 %}{% empty %}
+      <div style="padding:26px 18px;text-align:center;color:var(--faint);font-size:13px">Nothing approved yet.</div>
+    {% endfor %}
+  </div>
+</div>
+<p class="foot-note"><b>Submitting is a request, not a completion.</b> A task stays "awaiting
+approval" until your manager confirms it, and only then does it count toward a goal. If it comes
+back, the reason is shown on the task.</p>
+{% endblock %}

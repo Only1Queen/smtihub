@@ -1,0 +1,18 @@
+{% extends "hub/base.html" %}
+{% block title %}Submit update — SMTI HUB{% endblock %}
+{% block crumb %}<a href="{% url 'my_tasks' %}" style="color:var(--muted)">My tasks</a> / <b>Submit</b>{% endblock %}
+{% block content %}
+<h1>Submit for approval</h1>
+<p class="sub">{{ task.title }}</p>
+<div class="card">
+  <form method="post" class="form-body">{% csrf_token %}
+    {% include "hub/_form.html" %}
+    <p class="dlg-note">This is a request, not a completion. The task stays "awaiting approval"
+      until your manager confirms it{% if task.kpi %}, and only then does it count toward
+      {{ task.kpi.code }}{% endif %}.</p>
+    <div class="dlg-actions">
+      <a href="{% url 'my_tasks' %}"><button type="button" class="btn ghost">Cancel</button></a>
+      <button class="btn primary" type="submit">Submit</button></div>
+  </form>
+</div>
+{% endblock %}

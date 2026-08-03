@@ -1,0 +1,65 @@
+{% extends "hub/base.html" %}
+{% block title %}Activity — SMTI HUB{% endblock %}
+{% block crumb %}<b>Activity</b>{% endblock %}
+{% block content %}
+<h1>Activity</h1>
+<p class="sub">Permanent record of every score, goal, task, approval and account change.</p>
+<div class="card">
+  <div class="card-head"><span class="card-title">Events</span>
+    <span class="card-note">Append-only — no row here can be edited or deleted</span>
+    <div class="spacer" style="flex:1"></div>
+    <form method="get" style="display:flex;gap:8px;margin:0">
+      <input type="search" name="q" value="{{ q }}" placeholder="Filter by name…">
+      <select name="action">
+        <option value="">All actions</option>
+        {% for a in actions %}<option value="{{ a }}" {% if a == action %}selected{% endif %}>{{ a }}</option>{% endfor %}
+      </select>
+      <button class="btn sm" type="submit">Filter</button>
+      <a href="?{{ query }}{% if query %}&amp;{% endif %}export=csv"><button class="btn sm ghost"
+        type="button">Export CSV</button></a>
+    </form></div>
+  <div class="tw"><table>
+    <thead><tr><th>When</th><th>Who</th><th>Action</th><th>What</th>
+      <th style="text-align:right">Change</th></tr></thead>
+    <tbody>
+    {% for e in events %}
+      <tr class="audit-row">
+        <td class="ts">{{ e.timestamp|date:"Y-m-d H:i" }}</td>
+        <td style="white-space:nowrap">{{ e.actor_label }}</td>
+        <td><span class="tag act">{{ e.action }}</span></td>
+        <td style="color:var(--muted)">{{ e.target }}
+          {% if e.detail.reason %}<div class="kpi-sub">{{ e.detail.reason }}</div>{% endif %}
+          {% if e.detail.assignment_changed %}
+            <div class="kpi-sub">Assigned: {{ e.detail.assigned_before }}
+              → <b>{{ e.detail.assigned_after }}</b></div>
+          {% elif e.detail.assigned_to %}
+            <div class="kpi-sub">Assigned: {{ e.detail.assigned_to }}</div>
+          {% endif %}</td>
+        <td class="delta" style="text-align:right;white-space:nowrap">
+          {% if e.detail.before is not None %}<span class="from">{{ e.detail.before }}</span> → {% endif %}
+          {% if e.detail.after is not None %}<span class="to">{{ e.detail.after }}</span>
+          {% else %}<span style="color:var(--faint)">—</span>{% endif %}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" style="padding:26px;text-align:center;color:var(--faint)">No events match.</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% if page.has_other_pages %}
+  <div class="set-row">
+    <div class="set-info"><div class="set-desc">Page {{ page.number }} of {{ page.paginator.num_pages }} ·
+      {{ page.paginator.count }} event{{ page.paginator.count|pluralize }} match</div></div>
+    <div class="set-ctl" style="display:flex;gap:6px">
+      {% if page.has_previous %}
+        <a href="?{{ query }}{% if query %}&amp;{% endif %}page={{ page.previous_page_number }}"><button class="btn sm" type="button">Newer</button></a>
+      {% endif %}
+      {% if page.has_next %}
+        <a href="?{{ query }}{% if query %}&amp;{% endif %}page={{ page.next_page_number }}"><button class="btn sm" type="button">Older</button></a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+<p class="foot-note"><b>Why before-and-after matters:</b> when an analyst questions a figure months
+later, this table answers who changed it, when, and from what — without relying on anyone's
+memory. In production the database role holds INSERT and SELECT here and nothing else.</p>
+{% endblock %}

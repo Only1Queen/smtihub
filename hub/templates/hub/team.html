@@ -1,0 +1,65 @@
+{% extends "hub/base.html" %}{% load hub_extras %}
+{% block title %}Team — SMTI HUB{% endblock %}
+{% block crumb %}<b>Team</b>{% endblock %}
+{% block content %}
+<h1>Team</h1>
+<p class="sub">{{ rows|length }} analyst{{ rows|length|pluralize }} scored against the SMTI goals for {{ year.label }}.</p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-k">Team average</div>
+    <div class="stat-v {{ team_average|band_class }}">{% if team_average %}{{ team_average|floatformat:0 }}%{% else %}—{% endif %}</div>
+    <div class="stat-n">complete months only</div></div>
+  <div class="stat"><div class="stat-k">Goals</div><div class="stat-v">{{ year.goals.count }}</div>
+    <div class="stat-n"><a href="{% url 'goals' %}">manage</a></div></div>
+  <div class="stat"><div class="stat-k">Awaiting approval</div>
+    <div class="stat-v {% if pending_count %}s-warn{% endif %}">{{ pending_count }}</div>
+    <div class="stat-n"><a href="{% url 'tasks' %}">review tasks</a></div></div>
+  <div class="stat"><div class="stat-k">Add an analyst</div>
+    <div class="stat-v" style="font-size:15px;padding-top:6px">
+      <a href="{% url 'employee_new' %}"><button class="btn primary">+ Add analyst</button></a></div>
+    <div class="stat-n">deactivated, never deleted</div></div>
+</div>
+
+<div class="card">
+  <div class="card-head"><span class="card-title">Analysts</span>
+    <span class="card-note">Select a name to enter scores</span></div>
+  <div class="tw"><table>
+    <thead><tr><th>Analyst</th><th style="text-align:right">Year to date</th>
+      <th style="width:200px">Months complete</th><th style="text-align:right">Current month</th>
+      <th style="text-align:right">Manage</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr class="{% if not row.employee.active %}inactive{% endif %}">
+        <td><a href="{% url 'score_entry' row.employee.pk row.current_month %}" style="text-decoration:none;color:inherit">
+          <div class="who-cell"><div class="avatar">{{ row.employee.initials }}</div>
+          <div><div style="font-weight:600">{{ row.employee.name }}
+            {% if not row.employee.active %}<span class="tag" style="margin-left:6px">inactive</span>{% endif %}</div>
+          <div style="font-size:11.5px;color:var(--faint)">{{ row.employee.job_title }}</div></div></div></a></td>
+        <td class="num"><span class="score {{ row.annual|band_class }}">
+          {% if row.annual %}{{ row.annual|floatformat:0 }}%{% else %}—{% endif %}</span></td>
+        <td><div style="display:flex;align-items:center;gap:10px">
+          <div class="bar" style="flex:1"><i style="width:{% widthratio row.complete 12 100 %}%"></i></div>
+          <span class="mono" style="font-size:11.5px;color:var(--muted)">{{ row.complete }}/12</span></div></td>
+        <td class="num mono" style="color:var(--muted)">{{ row.current.entered }}/{{ row.current.slots }}</td>
+        <td><div class="row-actions">
+          <a href="{% url 'score_entry' row.employee.pk row.current_month %}"><button class="btn sm">Score</button></a>
+          <a href="{% url 'employee_edit' row.employee.pk %}"><button class="btn sm">Edit</button></a>
+          <a href="{% url 'employee_password' row.employee.pk %}"><button class="btn sm">Password</button></a>
+          <form method="post" action="{% url 'employee_toggle' row.employee.pk %}" style="margin:0">{% csrf_token %}
+            <button class="btn sm {% if row.employee.active %}danger{% endif %}" type="submit">
+              {% if row.employee.active %}Deactivate{% else %}Reactivate{% endif %}</button></form>
+        </div></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" style="text-align:center;color:var(--faint);padding:26px">
+        No analysts yet. Add one to start scoring.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<p class="foot-note"><b>Analysts are deactivated, never deleted.</b> Someone who leaves keeps
+their scores and their place in the year's history — they simply stop being able to sign in
+and drop out of the team average. <b>Year to date</b> averages only months where every
+eligible KPI has a score.</p>
+{% endblock %}

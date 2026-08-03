@@ -1,0 +1,34 @@
+{% extends "hub/base.html" %}
+{% block title %}{{ heading }} — SMTI HUB{% endblock %}
+{% block crumb %}<a href="{% url 'goals' %}" style="color:var(--muted)">Goals</a> / <b>{{ heading }}</b>{% endblock %}
+{% block content %}
+<h1>{{ heading }}</h1>
+<p class="sub">Applies from the next unscored month. Scored months are unaffected.</p>
+<form method="post">{% csrf_token %}
+  <div class="card">
+    <div class="card-head"><span class="card-title">Goal</span></div>
+    <div class="form-body">{% include "hub/_form.html" %}</div>
+  </div>
+  <div class="card">
+    <div class="card-head"><span class="card-title">KPIs</span>
+      <span class="card-note">A KPI scored <b>from tasks</b> takes its mark from approved task
+        weight instead of a typed number</span></div>
+    <div class="form-body">
+      {{ formset.management_form }}
+      {% for f in formset %}
+        <div class="kpi-row" style="margin-bottom:10px;flex-wrap:wrap">
+          {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+          {{ f.code }}{{ f.text }}{{ f.max_marks }}{{ f.scoring_mode }}
+          <label class="q-toggle">{{ f.quarterly }} Quarterly</label>
+          {% if f.instance.pk %}<label class="q-toggle">{{ f.DELETE }} Remove</label>{% endif %}
+          {% for error in f.errors.values %}<p class="f-hint err" style="flex-basis:100%">{{ error|striptags }}</p>{% endfor %}
+        </div>
+      {% endfor %}
+      <p class="f-hint">Marks need not total 100. Save and reopen to add another KPI row.</p>
+    </div>
+    <div class="dlg-actions" style="padding:0 20px 20px">
+      <a href="{% url 'goals' %}"><button type="button" class="btn ghost">Cancel</button></a>
+      <button class="btn primary" type="submit">Save goal</button></div>
+  </div>
+</form>
+{% endblock %}

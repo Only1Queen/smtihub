@@ -1,0 +1,16 @@
+{% extends "hub/base.html" %}
+{% block title %}{{ heading }} — SMTI HUB{% endblock %}
+{% block crumb %}<b>{{ heading }}</b>{% endblock %}
+{% block content %}
+<h1>{{ heading }}</h1>
+<p class="sub">{{ lede }}</p>
+<div class="card">
+  <form method="post" class="form-body">{% csrf_token %}
+    {% include "hub/_form.html" %}
+    <p class="dlg-note">{{ warning }}</p>
+    <div class="dlg-actions">
+      <a href="{{ cancel_url }}"><button type="button" class="btn ghost">Cancel</button></a>
+      <button class="btn primary" type="submit">Confirm</button></div>
+  </form>
+</div>
+{% endblock %}

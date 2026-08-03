@@ -1,0 +1,32 @@
+{% extends "hub/base.html" %}
+{% block title %}Review task — SMTI HUB{% endblock %}
+{% block crumb %}<a href="{% url 'tasks' %}" style="color:var(--muted)">Tasks</a> / <b>Review</b>{% endblock %}
+{% block content %}
+<h1>Review submission</h1>
+<p class="sub">{{ task.assignee.name }} · {{ task.title }}</p>
+<div class="card">
+  <div class="form-body">
+    {% if task.description %}<p class="task-desc">{{ task.description }}</p>{% endif %}
+    <div class="task-meta">
+      <span>Due <b>{{ task.due_date|date:"j M Y"|default:"—" }}</b></span>
+      <span>{{ task.month_label }}</span>
+      {% if task.kpi %}<span class="link-tag">{{ task.kpi.code }} · {{ task.weight }}% of KPI</span>
+      {% else %}<span class="link-none">operational · no marks</span>{% endif %}
+    </div>
+    <div class="submission">
+      <div class="sub-who">{{ update.author.name }} · {{ update.submitted_at|date:"j M, H:i" }}</div>
+      <p>{{ update.note|default:"(no note)" }}</p>
+    </div>
+  </div>
+  <form method="post" class="form-body" style="padding-top:0">{% csrf_token %}
+    {% include "hub/_form.html" %}
+    {% if task.kpi %}
+      <p class="dlg-note">Approving this moves {{ task.assignee.name }}'s {{ task.kpi.code }} mark
+        for {{ task.month_label }} immediately, and the change is logged.</p>
+    {% endif %}
+    <div class="dlg-actions">
+      <button class="btn" type="submit" name="decision" value="return">Send back</button>
+      <button class="btn primary" type="submit" name="decision" value="approve">Approve</button></div>
+  </form>
+</div>
+{% endblock %}

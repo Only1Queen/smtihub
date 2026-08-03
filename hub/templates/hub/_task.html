@@ -1,0 +1,42 @@
+{% load hub_extras %}
+<div class="task">
+  <div class="task-top">
+    <div style="flex:1;min-width:0">
+      <div class="task-title">{{ item.task.title }}</div>
+      {% if item.task.description %}<div class="task-desc">{{ item.task.description }}</div>{% endif %}
+      <div class="task-meta">
+        {% if not mine %}<span><b>{{ item.task.assignee.name }}</b></span>{% endif %}
+        <span>Due <b>{{ item.task.due_date|date:"j M Y"|default:"—" }}</b></span>
+        <span>{{ item.task.month_label }}</span>
+        {% if item.task.kpi %}
+          <span class="link-tag">{{ item.task.kpi.code }} · {{ item.task.weight }}% of KPI</span>
+        {% else %}
+          <span class="link-none">operational · no marks</span>
+        {% endif %}
+      </div>
+    </div>
+    <span class="st {{ item.task.status|status_class }}">{{ item.task.get_status_display }}</span>
+  </div>
+
+  {% if item.latest %}
+    <div class="submission {% if item.latest.decision == 'returned' %}returned{% endif %}">
+      <div class="sub-who">{{ item.latest.author.name }} · {{ item.latest.submitted_at|date:"j M, H:i" }}</div>
+      <p>{{ item.latest.note|default:"(no note)" }}</p>
+      {% if item.latest.decision == 'returned' and item.latest.decision_note %}
+        <div class="verdict"><b>Sent back:</b> {{ item.latest.decision_note }}</div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <div class="task-acts">
+    {% if mine %}
+      {% if item.task.status == 'submitted' %}
+        <span class="task-meta" style="margin:0">Waiting on your manager.</span>
+      {% elif item.task.status != 'approved' %}
+        <a href="{% url 'task_submit' item.task.pk %}"><button class="btn sm primary">Submit for approval</button></a>
+      {% endif %}
+    {% elif item.task.status == 'submitted' %}
+      <a href="{% url 'task_decide' item.task.pk %}"><button class="btn sm primary">Review</button></a>
+    {% endif %}
+  </div>
+</div>

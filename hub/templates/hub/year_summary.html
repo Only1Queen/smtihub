@@ -1,0 +1,44 @@
+{% extends "hub/base.html" %}{% load hub_extras %}
+{% block title %}Year summary — SMTI HUB{% endblock %}
+{% block crumb %}<b>Year summary</b>{% endblock %}
+{% block content %}
+<h1>Year summary</h1>
+<p class="sub">Every analyst, every month. The export produces the same figures as CSV.</p>
+{% if years|length > 1 %}
+<form method="get" style="margin:0 0 18px">
+  <select name="year" onchange="this.form.submit()" style="max-width:220px">
+    {% for y in years %}<option value="{{ y.pk }}" {% if y.pk == year.pk %}selected{% endif %}>{{ y.label }}{% if y.closed %} (closed){% endif %}</option>{% endfor %}
+  </select>
+</form>
+{% endif %}
+<div class="card">
+  <div class="card-head"><span class="card-title">{{ year.label }}</span>
+    <span class="card-note">· = partly scored, – = not started</span>
+    <div class="spacer" style="flex:1"></div>
+    <a href="?export=csv"><button class="btn sm">Export CSV</button></a></div>
+  <div class="tw"><table class="sticky-col">
+    <thead><tr><th>Analyst</th>
+      {% for m in months %}<th style="text-align:center" class="mono">{{ m|slice:":3" }}</th>{% endfor %}
+      <th style="text-align:right">YTD</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr><td style="white-space:nowrap;font-weight:600">{{ row.employee.name }}</td>
+        {% for cell in row.cells %}
+          {% if cell.percent %}
+            <td class="grid-cell filled" style="color:var(--{{ cell.band }});font-weight:600">{{ cell.percent|floatformat:0 }}</td>
+          {% elif cell.partial %}
+            <td class="grid-cell" style="color:var(--faint)">·</td>
+          {% else %}
+            <td class="grid-cell" style="color:var(--faint)">–</td>
+          {% endif %}
+        {% endfor %}
+        <td class="num"><span class="score {{ row.annual|band_class }}">
+          {% if row.annual %}{{ row.annual|floatformat:0 }}%{% else %}—{% endif %}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody></table></div>
+</div>
+<p class="foot-note"><b>Closing the year</b> freezes every score, goal and KPI. A closed year can
+be reopened for a late correction — the reopen is audited and asks for a reason, so the history
+shows the change rather than hiding it.</p>
+{% endblock %}

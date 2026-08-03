@@ -1,0 +1,31 @@
+from django.urls import path
+
+from hub import views
+
+urlpatterns = [
+    path("", views.home, name="team"),
+    path("goals/", views.goals, name="goals"),
+    path("goals/new/", views.goal_new, name="goal_new"),
+    path("goals/<int:pk>/edit/", views.goal_edit, name="goal_edit"),
+    path("tasks/", views.tasks, name="tasks"),
+    path("tasks/new/", views.task_new, name="task_new"),
+    path("tasks/<int:pk>/decide/", views.task_decide, name="task_decide"),
+    path("tasks/<int:pk>/submit/", views.task_submit, name="task_submit"),
+    path("score/<int:employee_id>/<int:month>/", views.score_entry, name="score_entry"),
+    path("score/<int:employee_id>/<int:month>/save/", views.score_save, name="score_save"),
+    path("score/<int:employee_id>/<int:month>/close/", views.month_close, name="month_close"),
+    path("score/<int:employee_id>/<int:month>/reopen/", views.month_reopen, name="month_reopen"),
+    path("me/", views.my_appraisal, name="my_appraisal"),
+    path("me/acknowledge/<int:year_id>/", views.year_acknowledge, name="year_acknowledge"),
+    path("me/<int:employee_id>/", views.my_appraisal, name="employee_appraisal"),
+    path("my-tasks/", views.my_tasks, name="my_tasks"),
+    path("summary/", views.year_summary, name="year_summary"),
+    path("activity/", views.activity, name="activity"),
+    path("settings/", views.settings_page, name="settings"),
+    path("people/new/", views.employee_new, name="employee_new"),
+    path("people/<int:pk>/edit/", views.employee_edit, name="employee_edit"),
+    path("people/<int:pk>/toggle/", views.employee_toggle, name="employee_toggle"),
+    path("people/<int:pk>/password/", views.employee_password, name="employee_password"),
+    path("years/<int:pk>/close/", views.year_close, name="year_close"),
+    path("years/<int:pk>/reopen/", views.year_reopen, name="year_reopen"),
+]

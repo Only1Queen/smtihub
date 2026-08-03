@@ -1,0 +1,65 @@
+{% load static %}<!doctype html>
+<html lang="en" data-theme="{{ request.COOKIES.theme|default:'' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — SMTI HUB</title>
+  <link rel="icon" href="{% static 'hub/favicon.svg' %}" type="image/svg+xml">
+  <link rel="stylesheet" href="{% static 'hub/app.css' %}">
+  <script defer src="{% static 'hub/hub.js' %}"></script>
+</head>
+<body class="auth-body">
+{% include "hub/_icons.html" %}
+<main class="auth">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <div class="auth-eyebrow">Security Monitoring &amp; Threat Intelligence</div>
+      <div class="auth-word">SMTI HUB</div>
+      <p class="auth-lede">Team appraisal, goals and tasks.</p>
+    </div>
+
+    <form method="post" class="auth-form" novalidate>
+      {% csrf_token %}
+
+      {% if form.errors %}
+        <div class="auth-error" role="alert">
+          <svg class="ic-sm" aria-hidden="true"><use href="#i-alert"></use></svg>
+          <span>That username and password do not match. Check both and try again.</span>
+        </div>
+      {% endif %}
+
+      <div class="auth-field">
+        <label for="id_username">Username</label>
+        <input type="text" name="username" id="id_username" autocomplete="username"
+               autocapitalize="none" spellcheck="false" required autofocus
+               value="{{ form.username.value|default:'' }}">
+      </div>
+
+      <div class="auth-field">
+        <label for="id_password">Password</label>
+        <input type="password" name="password" id="id_password"
+               autocomplete="current-password" required>
+      </div>
+
+      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+
+      <button class="btn primary auth-submit" type="submit">Sign in</button>
+    </form>
+
+    <p class="auth-foot">
+      Internal system. If you cannot sign in, ask your manager to reset your password —
+      accounts are not self-service.
+    </p>
+  </div>
+
+  <div class="auth-theme">
+    <span class="auth-theme-label">Appearance</span>
+    <div class="seg">
+      <button type="button" data-theme-set="light" aria-pressed="false" aria-label="Light theme"><svg class="ic-sm" aria-hidden="true"><use href="#i-sun"></use></svg></button>
+      <button type="button" data-theme-set="dark" aria-pressed="false" aria-label="Dark theme"><svg class="ic-sm" aria-hidden="true"><use href="#i-moon"></use></svg></button>
+      <button type="button" data-theme-set="system" aria-pressed="true" aria-label="Follow system theme"><svg class="ic-sm" aria-hidden="true"><use href="#i-system"></use></svg></button>
+    </div>
+  </div>
+</main>
+</body>
+</html>

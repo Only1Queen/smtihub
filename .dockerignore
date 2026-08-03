@@ -1,0 +1,15 @@
+# Never bake secrets or local state into the image.
+.env
+.env.*
+!.env.example
+deploy/certs/*.key
+deploy/certs/*.crt
+backups/
+.venv/
+db.sqlite3
+staticfiles/
+.git/
+__pycache__/
+*.pyc
+appraisal-tracker/
+docs/

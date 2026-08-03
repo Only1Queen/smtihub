@@ -1,0 +1,19 @@
+{% load hub_extras %}
+<div class="saveline" id="saveline">
+  <span class="dot-ok"></span><span id="saveState">All changes saved</span>
+  <div class="spacer" style="flex:1"></div>
+  <span class="mono" style="color:var(--muted)">{{ summary.entered }} of {{ summary.slots }} scored</span>
+  <span class="mono" style="color:var(--border-2)">|</span>
+  <span class="mono"><span style="font-weight:700">{{ summary.raw|floatformat:"-1" }}</span>
+    <span style="color:var(--faint)">/ {{ summary.maximum }}</span></span>
+  <span class="score {{ summary.percent|band_class }}">
+    {% if summary.complete %}{{ summary.percent|floatformat:0 }}%{% else %}—{% endif %}</span>
+  {% if frozen %}
+    <span class="tag mono"><svg class="ic-xs" aria-hidden="true"><use href="#i-lock"></use></svg>scored &amp; frozen</span>
+  {% elif summary.complete %}
+    <form method="post" action="{% url 'month_close' employee.pk month %}" style="margin:0">
+      {% csrf_token %}
+      <button class="btn sm primary" type="submit">Mark month scored</button>
+    </form>
+  {% endif %}
+</div>

@@ -1,0 +1,46 @@
+{% extends "hub/base.html" %}{% load hub_extras %}
+{% block title %}Tasks — SMTI HUB{% endblock %}
+{% block crumb %}<b>Tasks</b>{% endblock %}
+{% block content %}
+<h1>Tasks</h1>
+<p class="sub">Assign work, approve what the team submits, and decide what counts toward a goal.</p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-k">Awaiting your approval</div>
+    <div class="stat-v {% if pending %}s-warn{% endif %}">{{ pending|length }}</div>
+    <div class="stat-n">nothing counts until approved</div></div>
+  <div class="stat"><div class="stat-k">Open this month</div><div class="stat-v">{{ open_count }}</div>
+    <div class="stat-n">{{ months|index:month|index:1 }}</div></div>
+  <div class="stat"><div class="stat-k">Goal-linked</div><div class="stat-v">{{ linked }}</div>
+    <div class="stat-n">the rest are operational</div></div>
+  <div class="stat"><div class="stat-k">Assign work</div>
+    <div class="stat-v" style="font-size:15px;padding-top:6px">
+      <a href="{% url 'task_new' %}"><button class="btn primary">+ New task</button></a></div>
+    <div class="stat-n">goal-linked or standalone</div></div>
+</div>
+
+<div class="card">
+  <div class="card-head"><span class="card-title">Awaiting approval</span>
+    <span class="card-note">Approving a goal-linked task moves the score immediately</span></div>
+  {% for item in pending %}{% include "hub/_task.html" %}{% empty %}
+    <div style="padding:26px 18px;text-align:center;color:var(--faint);font-size:13px">
+      Nothing to approve. The team is up to date.</div>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <div class="card-head"><span class="card-title">All tasks · {{ months|index:month|index:1 }}</span>
+    <div class="spacer" style="flex:1"></div>
+    <form method="get" style="margin:0"><select name="month" onchange="this.form.submit()">
+      {% for i, label in months %}<option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select></form></div>
+  {% for item in rest %}{% include "hub/_task.html" %}{% empty %}
+    <div style="padding:26px 18px;text-align:center;color:var(--faint);font-size:13px">
+      No tasks for this month yet.</div>
+  {% endfor %}
+</div>
+
+<p class="foot-note"><b>Operational tasks carry no marks.</b> Migrations, shift handovers and
+vendor calls are tracked here so you get daily visibility, but they touch no KPI and cannot move
+anyone's appraisal. Only tasks with a KPI and a weight do that.</p>
+{% endblock %}

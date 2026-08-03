@@ -1,0 +1,24 @@
+{% extends "hub/base.html" %}{% load hub_extras %}
+{% block title %}Acknowledge {{ year.label }} — SMTI HUB{% endblock %}
+{% block crumb %}<a href="{% url 'my_appraisal' %}" style="color:var(--muted)">My appraisal</a> / <b>Acknowledge</b>{% endblock %}
+{% block content %}
+<h1>Acknowledge {{ year.label }}</h1>
+<p class="sub">{{ employee.name }} · the year is closed and these marks are final</p>
+<div class="card">
+  <div class="set-row">
+    <div class="set-info"><div class="set-name">Year to date</div>
+      <div class="set-desc">The figure recorded with your acknowledgement.</div></div>
+    <div class="set-ctl"><span class="score {{ annual|band_class }}" style="font-size:18px">
+      {% if annual %}{{ annual|floatformat:1 }}%{% else %}—{% endif %}</span></div>
+  </div>
+  <form method="post" class="form-body">{% csrf_token %}
+    {% include "hub/_form.html" %}
+    <p class="dlg-note">Acknowledging records that you have seen this appraisal. It is not
+      agreement — if you disagree, say so in the comment and it is kept permanently, word for
+      word, next to the mark.</p>
+    <div class="dlg-actions">
+      <a href="{% url 'my_appraisal' %}"><button type="button" class="btn ghost">Not yet</button></a>
+      <button class="btn primary" type="submit">Acknowledge</button></div>
+  </form>
+</div>
+{% endblock %}

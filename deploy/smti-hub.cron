@@ -1,0 +1,20 @@
+# SMTI HUB scheduled jobs.
+#
+#   sudo cp deploy/smti-hub.cron /etc/cron.d/smti-hub
+#   sudo chown root:root /etc/cron.d/smti-hub && sudo chmod 644 /etc/cron.d/smti-hub
+#
+# Inline, not a task queue: this is a handful of jobs a month for one team, and
+# a queue would be two more services to run and monitor. Output goes to syslog;
+# `journalctl -t smti-hub` is where a failed run shows up.
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Month-end reminder to the manager: unscored months and tasks awaiting approval.
+0 9 1 * * root cd /opt/smti-hub && docker compose run --rm --no-TTY web python manage.py send_reminders 2>&1 | logger -t smti-hub
+
+# Close accounts that Active Directory has closed. Safe to run when AD is
+# unreachable: the command refuses rather than deactivating everybody.
+30 2 * * * root cd /opt/smti-hub && docker compose run --rm --no-TTY web python manage.py sync_ad 2>&1 | logger -t smti-hub
+
+# Backups. See deploy/backup.sh.
+0 1 * * * root cd /opt/smti-hub && ./deploy/backup.sh 2>&1 | logger -t smti-hub

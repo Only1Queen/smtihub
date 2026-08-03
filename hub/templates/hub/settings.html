@@ -1,0 +1,78 @@
+{% extends "hub/base.html" %}
+{% block title %}Settings — SMTI HUB{% endblock %}
+{% block crumb %}<b>Settings</b>{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<p class="sub">Appearance applies to your account only.</p>
+<div class="card">
+  <div class="card-head"><span class="card-title">Appearance</span>
+    <span class="card-note">Available to everyone</span></div>
+  <div class="set-row">
+    <div class="set-info"><div class="set-name">Theme</div>
+      <div class="set-desc">Choose a light or dark background, or follow whatever your computer is set to.</div></div>
+    <div class="set-ctl"><div class="seg">
+      <button data-theme-set="light" aria-pressed="false"><svg class="ic-sm" aria-hidden="true"><use href="#i-sun"></use></svg>Light</button>
+      <button data-theme-set="dark" aria-pressed="false"><svg class="ic-sm" aria-hidden="true"><use href="#i-moon"></use></svg>Dark</button>
+      <button data-theme-set="system" aria-pressed="true"><svg class="ic-sm" aria-hidden="true"><use href="#i-system"></use></svg>System</button>
+    </div></div>
+  </div>
+</div>
+{% if is_manager %}
+<div class="card">
+  <div class="card-head"><span class="card-title">Appraisal year</span>
+    <span class="card-note">Manager only</span></div>
+  <div class="set-row">
+    <div class="set-info"><div class="set-name">{{ year.label }}</div>
+      <div class="set-desc">{% if year.closed %}Closed and read-only.{% else %}Open. Scores can be
+        entered and revised. Closing the year freezes every score, goal and KPI.{% endif %}</div></div>
+    <div class="set-ctl">
+      {% if year.closed %}
+        <a href="{% url 'year_reopen' year.pk %}"><button class="btn">Reopen year</button></a>
+      {% else %}
+        <a href="{% url 'year_close' year.pk %}"><button class="btn danger">Close year</button></a>
+      {% endif %}</div>
+  </div>
+  {% if years|length > 1 %}
+  <div class="set-row">
+    <div class="set-info"><div class="set-name">Other years</div>
+      <div class="set-desc">Closed years stay readable. Reopening one is audited and needs a reason.</div></div>
+    <div class="set-ctl" style="display:flex;gap:6px;flex-wrap:wrap">
+      {% for y in years %}{% if y.pk != year.pk %}
+        <a href="{% url 'year_summary' %}?year={{ y.pk }}"><button class="btn sm">{{ y.label }}
+          {% if y.closed %}<svg class="ic-xs" aria-hidden="true"><use href="#i-lock"></use></svg>{% endif %}</button></a>
+      {% endif %}{% endfor %}</div>
+  </div>
+  {% endif %}
+  <div class="set-row">
+    <div class="set-info"><div class="set-name">Start a new year</div>
+      <div class="set-desc">Run <code>manage.py new_appraisal_year</code> to create the next year and
+        copy this year's goals, KPIs and assignments across, ready to edit before scoring opens.</div></div>
+    <div class="set-ctl"><span class="tag mono">command line</span></div>
+  </div>
+</div>
+{% endif %}
+<div class="card">
+  <div class="card-head"><span class="card-title">Account</span></div>
+  <div class="set-row">
+    <div class="set-info"><div class="set-name">{{ me.name|default:user.get_username }}</div>
+      <div class="set-desc">{% if ad_account %}Signed in with your Active Directory account.
+        Your password is managed in Windows — change it there (Ctrl+Alt+Del → Change a password)
+        and it changes here too.{% else %}Signed in with a local account held by this
+        application.{% endif %}</div></div>
+    <div class="set-ctl">{% if not ad_account %}
+      <a href="{% url 'password_change' %}"><button class="btn">Change password</button></a>
+    {% else %}<span class="tag mono">Active Directory</span>{% endif %}</div>
+  </div>
+  {% for ack in acknowledgements %}
+  <div class="set-row">
+    <div class="set-info"><div class="set-name">{{ ack.year.label }} acknowledged</div>
+      <div class="set-desc">{{ ack.acknowledged_at|date:"j M Y, H:i" }}{% if ack.annual_percent %}
+        · recorded at {{ ack.annual_percent }}%{% endif %}{% if ack.comment %}
+        · “{{ ack.comment }}”{% endif %}</div></div>
+    <div class="set-ctl"><span class="tag mono">signed</span></div>
+  </div>
+  {% endfor %}
+</div>
+<p class="foot-note"><b>Theme is stored per user</b>, so the manager and each analyst keep their own
+preference.</p>
+{% endblock %}

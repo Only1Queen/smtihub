@@ -1,0 +1,43 @@
+{
+  "name": "smti-appraisal-tracker",
+  "version": "1.0.0",
+  "description": "SMTI Appraisal Tracker",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "dist": "vite build && electron-builder"
+  },
+  "build": {
+    "appId": "com.smti.appraisaltracker",
+    "productName": "SMTI Appraisal Tracker",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "directories": {
+      "output": "dist-exe"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ]
+  },
+  "dependencies": {
+    "lucide-react": "^0.383.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "recharts": "^2.7.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.0.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.6.4",
+    "vite": "^4.4.5"
+  }
+}

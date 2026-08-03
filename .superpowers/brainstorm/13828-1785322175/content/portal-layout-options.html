@@ -1,0 +1,45 @@
+<h2>Choose the portal’s primary navigation style</h2>
+<p class="subtitle">The same security-conscious Django portal can use different information architectures. Pick the layout that feels clearest for managers and employees.</p>
+
+<div class="cards">
+  <div class="card" data-choice="sidebar" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">SMTI Appraisals</div>
+        <div style="display:flex;min-height:220px">
+          <div class="mock-sidebar" style="width:31%">Overview<br><br>My Team<br><br>Appraisal Cycles<br><br>Reports<br><br>Audit Log</div>
+          <div class="mock-content" style="width:69%"><div class="label">Manager overview</div><h3>Team performance</h3><div class="placeholder" style="height:70px">Score cards · pending reviews · cycle status</div><br><div class="placeholder" style="height:55px">Monthly trend chart</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>Persistent sidebar</h3><p>Best for a management portal with several modules and frequent navigation.</p></div>
+  </div>
+
+  <div class="card" data-choice="topnav" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">SMTI Appraisals · Overview · Team · Cycles · Reports</div>
+        <div class="mock-content" style="min-height:220px"><div class="label">Manager overview</div><h3>Team performance</h3><div class="placeholder" style="height:70px">Score cards · pending reviews · cycle status</div><br><div class="placeholder" style="height:55px">Monthly trend chart</div></div>
+      </div>
+    </div>
+    <div class="card-body"><h3>Compact top navigation</h3><p>More content width and a simpler feel, suitable when the first release stays tightly focused.</p></div>
+  </div>
+
+  <div class="card" data-choice="hybrid" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">SMTI Appraisals <span style="float:right">Search · Alerts · Profile</span></div>
+        <div style="display:flex;min-height:220px">
+          <div class="mock-sidebar" style="width:25%">Overview<br><br>Team<br><br>Cycles<br><br>Reports</div>
+          <div class="mock-content" style="width:75%"><div class="label">Manager overview</div><h3>Team performance</h3><div class="placeholder" style="height:70px">Score cards · pending reviews · cycle status</div><br><div class="placeholder" style="height:55px">Monthly trend chart</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>Hybrid workspace</h3><p>Sidebar for modules plus a top bar for search, notifications, security status, and account controls.</p></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Design constraints applied to every option</h3>
+  <p>Keyboard-accessible navigation, responsive layouts, clear status labels, no sensitive data in URLs, obvious permission boundaries, and a consistent audit/security indicator.</p>
+</div>

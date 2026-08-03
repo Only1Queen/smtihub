@@ -1,0 +1,6 @@
+Django==5.2.13
+psycopg[binary]==3.2.3
+gunicorn==23.0.0
+whitenoise==6.8.2
+django-auth-ldap==5.3.0
+django-axes==8.3.1

@@ -1,0 +1,25 @@
+{# Every form page renders through here, so they all lay out the same way. #}
+<div class="form-grid">
+  {% for field in form %}
+    {% if field.widget_type == 'checkbox' %}
+      <div class="f-col check wide" id="row-{{ field.name }}">
+        {{ field }}<label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {% if field.help_text %}<p class="f-hint">{{ field.help_text }}</p>{% endif %}
+        {% for error in field.errors %}<p class="f-hint err">{{ error }}</p>{% endfor %}
+      </div>
+    {% else %}
+      {# Prose and lists of choices read badly squeezed into one column. #}
+      <div class="f-col{% if field.widget_type == 'textarea' or field.widget_type == 'checkboxselectmultiple' %} wide{% endif %}"
+           id="row-{{ field.name }}">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<p class="f-hint">{{ field.help_text }}</p>{% endif %}
+        {% for error in field.errors %}<p class="f-hint err">{{ error }}</p>{% endfor %}
+      </div>
+    {% endif %}
+  {% endfor %}
+  {% for error in form.non_field_errors %}
+    <div class="notice bad">
+      <svg class="ic-sm" aria-hidden="true"><use href="#i-alert"></use></svg><span>{{ error }}</span></div>
+  {% endfor %}
+</div>

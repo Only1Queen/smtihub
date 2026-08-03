@@ -1,0 +1,28 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Too many attempts — SMTI HUB</title>
+  <link rel="icon" href="{% static 'hub/favicon.svg' %}" type="image/svg+xml">
+  <link rel="stylesheet" href="{% static 'hub/app.css' %}">
+</head>
+<body class="auth-body">
+<main class="auth">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <div class="auth-eyebrow">Security Monitoring &amp; Threat Intelligence</div>
+      <div class="auth-word">SMTI HUB</div>
+      <p class="auth-lede">Sign-in temporarily locked.</p>
+    </div>
+    <p class="auth-foot" style="text-align:left">
+      Too many failed attempts. This is a lockout, not a rejected password: the right password
+      will not work either until it clears, which it does on its own after a few minutes. If you
+      cannot wait, ask your manager to clear it. Every attempt, including these, is in the
+      activity log.
+    </p>
+    <p class="auth-foot"><a href="/accounts/login/">Back to sign in</a></p>
+  </div>
+</main>
+</body>
+</html>

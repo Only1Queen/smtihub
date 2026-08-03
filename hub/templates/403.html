@@ -1,0 +1,22 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Not allowed — SMTI HUB</title>
+  <link rel="icon" href="{% static 'hub/favicon.svg' %}" type="image/svg+xml">
+  <link rel="stylesheet" href="{% static 'hub/app.css' %}">
+</head>
+<body class="auth-body">
+<main class="auth">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <div class="auth-word">Not allowed</div>
+      <p class="auth-lede">{{ exception|default:"You do not have access to that." }}</p>
+    </div>
+    <p class="auth-foot">Analysts see their own record only. If you think you should have access
+      to this, ask your manager. <a href="/">Back to your home page</a>.</p>
+  </div>
+</main>
+</body>
+</html>

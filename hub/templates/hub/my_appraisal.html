@@ -1,0 +1,138 @@
+{% extends "hub/base.html" %}{% load hub_extras %}
+{% block title %}My appraisal — SMTI HUB{% endblock %}
+{% block crumb %}<b>{% if readonly %}My appraisal{% else %}{{ employee.name }}{% endif %}</b>{% endblock %}
+{% block content %}
+<h1>{% if readonly %}My appraisal{% else %}{{ employee.name }}{% endif %}</h1>
+<p class="sub">{{ employee.name }} · {{ year.label }} · read-only</p>
+{% if years|length > 1 %}
+<form method="get" style="margin:0 0 18px">
+  <select name="year" onchange="this.form.submit()" style="max-width:220px">
+    {% for y in years %}<option value="{{ y.pk }}" {% if y.pk == year.pk %}selected{% endif %}>{{ y.label }}{% if y.closed %} (closed){% endif %}</option>{% endfor %}
+  </select>
+</form>
+{% endif %}
+
+{% if acknowledgement %}
+  <div class="notice good"><svg class="ic-sm" aria-hidden="true"><use href="#i-check"></use></svg>
+    <span>{% if readonly %}You acknowledged{% else %}{{ employee.name }} acknowledged{% endif %}
+      {{ year.label }} on {{ acknowledgement.acknowledged_at|date:"j M Y" }}{% if acknowledgement.annual_percent %}
+      at {{ acknowledgement.annual_percent }}%{% endif %}.{% if acknowledgement.comment %}
+      “{{ acknowledgement.comment }}”{% endif %}</span></div>
+{% elif can_acknowledge %}
+  <div class="notice bad"><svg class="ic-sm" aria-hidden="true"><use href="#i-alert"></use></svg>
+    <span>{{ year.label }} is closed and final.
+      <a href="{% url 'year_acknowledge' year.pk %}">Acknowledge it</a> to record that you have
+      seen it. You can add a comment, including one that disagrees.</span></div>
+{% elif year.closed %}
+  <div class="notice bad"><svg class="ic-sm" aria-hidden="true"><use href="#i-alert"></use></svg>
+    <span>{{ year.label }} is closed and has not been acknowledged by {{ employee.name }}.</span></div>
+{% endif %}
+
+<div class="stats">
+  <div class="stat"><div class="stat-k">Year to date</div>
+    <div class="stat-v {{ annual|band_class }}">{% if annual %}{{ annual|floatformat:0 }}%{% else %}—{% endif %}</div>
+    <div class="stat-n">mean of {{ complete }} complete month{{ complete|pluralize }}</div></div>
+  <div class="stat"><div class="stat-k">Best month</div>
+    <div class="stat-v {{ best|band_class }}">{% if best %}{{ best|floatformat:0 }}%{% else %}—{% endif %}</div>
+    <div class="stat-n">so far</div></div>
+  <div class="stat"><div class="stat-k">Goals</div><div class="stat-v">{{ goal_rows|length }}</div>
+    <div class="stat-n">assigned to you</div></div>
+  <div class="stat"><div class="stat-k">Months complete</div>
+    <div class="stat-v">{{ complete }}<span style="font-size:15px;color:var(--faint)">/12</span></div>
+    <div class="stat-n">of the appraisal year</div></div>
+</div>
+
+<div class="card">
+  <div class="card-head"><span class="card-title">Monthly trend</span>
+    <span class="card-note">Complete months only</span></div>
+  <div class="chart"><svg viewBox="0 0 720 176" role="img"
+      aria-label="Monthly appraisal percentage across the year">
+    {% for line in "0,70,90,100"|make_list %}{% endfor %}
+    <line x1="34" x2="714" y1="150" y2="150" stroke="var(--border)"/>
+    <line x1="34" x2="714" y1="45" y2="45" stroke="var(--border)" stroke-dasharray="3 3"/>
+    <line x1="34" x2="714" y1="87" y2="87" stroke="var(--border)" stroke-dasharray="3 3"/>
+    <text x="27" y="153" text-anchor="end" font-size="9.5" fill="var(--faint)">0</text>
+    <text x="27" y="90" text-anchor="end" font-size="9.5" fill="var(--faint)">70</text>
+    <text x="27" y="48" text-anchor="end" font-size="9.5" fill="var(--faint)">90</text>
+    {% for c in chart %}
+      {% if c.percent %}
+        <rect x="{{ forloop.counter0|mul:57|add:44 }}" y="{{ c.percent|bar_y }}"
+              width="36" height="{{ c.percent|bar_h }}" rx="2" fill="var(--{{ c.band }})"/>
+      {% else %}
+        <rect x="{{ forloop.counter0|mul:57|add:44 }}" y="147" width="36" height="3" rx="1.5" fill="var(--border-2)"/>
+      {% endif %}
+      <text x="{{ forloop.counter0|mul:57|add:62 }}" y="168" text-anchor="middle"
+            font-size="9.5" fill="var(--faint)">{{ c.short }}</text>
+    {% endfor %}
+  </svg></div>
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--good)"></i>90% and above</span>
+    <span><i class="swatch" style="background:var(--warn)"></i>70–89%</span>
+    <span><i class="swatch" style="background:var(--bad)"></i>Below 70%</span>
+    <span><i class="swatch" style="background:var(--border-2)"></i>Not yet complete</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><span class="card-title">By goal</span>
+    <span class="card-note">Select a goal to see every KPI, month by month</span></div>
+  <table><tbody>
+  {% for row in goal_rows %}
+    <tr class="goal-toggle" tabindex="0" role="button" aria-expanded="false"
+        data-detail="goal-{{ row.goal.pk }}">
+      <td style="width:56px;white-space:nowrap"><span class="chev"><svg aria-hidden="true"><use href="#i-chevron"></use></svg></span>
+        <span class="mono" style="font-weight:700;color:var(--accent)">{{ row.goal.code }}</span></td>
+      <td><div>{{ row.goal.name }}</div>
+        <div class="kpi-sub">{{ row.kpis|length }} KPIs · {{ row.goal.total_marks }} marks ·
+          {{ row.scored }} months scored</div></td>
+      <td style="width:180px"><div class="bar"><i style="width:{{ row.percent|default:0|floatformat:0 }}%;background:var(--{{ row.band }})"></i></div></td>
+      <td class="num" style="width:70px"><span class="score {{ row.percent|band_class }}">
+        {% if row.percent %}{{ row.percent|floatformat:0 }}%{% else %}—{% endif %}</span></td>
+    </tr>
+    <tr class="goal-detail hidden" id="goal-{{ row.goal.pk }}"><td colspan="4" style="padding:0">
+      <div class="detail-wrap">
+        <div class="tw"><table class="detail-table">
+          <thead><tr><th></th><th>KPI</th><th style="text-align:right">Max</th>
+            {% for m in months %}<th style="text-align:center" class="mono">{{ m|slice:":3" }}</th>{% endfor %}
+            <th style="text-align:right">YTD</th></tr></thead>
+          <tbody>
+          {% for k in row.kpis %}
+            <tr>
+              <td class="mono" style="width:52px;font-weight:600;color:var(--accent);vertical-align:top">{{ k.kpi.code }}</td>
+              <td style="min-width:240px"><div>{{ k.kpi.text }}</div>
+                {% if k.kpi.quarterly %}<div class="kpi-sub">Quarterly — Jun, Sep, Dec, Mar only</div>{% endif %}
+                {% if k.tasks %}<div class="kpi-sub">Scored from approved tasks · {{ k.task_month }}</div>
+                  {% for t in k.tasks %}<div class="subtask" style="padding-left:0">
+                    <span class="st {{ t.status|status_class }}" style="font-size:9.5px;padding:1px 6px">{{ t.get_status_display }}</span>
+                    <span style="flex:1;min-width:0">{{ t.title }}</span>
+                    <span class="w">{{ t.weight }}%</span></div>{% endfor %}
+                {% endif %}</td>
+              <td class="num" style="width:56px;color:var(--faint)">/ {{ k.kpi.max_marks }}</td>
+              {% for cell in k.cells %}
+                {% if cell.state == 'value' %}
+                  <td class="grid-cell filled" style="color:var(--{{ cell.band }});font-weight:600"
+                      title="{{ k.kpi.code }} · {{ cell.month }} · {{ cell.value|floatformat:'-1' }} of {{ k.kpi.max_marks }}">{{ cell.value|floatformat:"-1" }}</td>
+                {% elif cell.state == 'na' %}
+                  <td class="grid-cell" style="color:var(--faint)" title="Quarterly KPI — not due">·</td>
+                {% else %}
+                  <td class="grid-cell" style="color:var(--faint)">–</td>
+                {% endif %}
+              {% endfor %}
+              <td class="num" style="width:64px"><span class="score {{ k.percent|band_class }}">
+                {% if k.percent %}{{ k.percent|floatformat:0 }}%{% else %}—{% endif %}</span></td>
+            </tr>
+          {% endfor %}
+          </tbody></table></div>
+        <div class="detail-foot"><span>· quarterly, not due</span><span>– not yet scored</span></div>
+      </div></td></tr>
+  {% empty %}
+    <tr><td style="padding:26px;text-align:center;color:var(--faint)">
+      No goals assigned to you yet.</td></tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+
+<p class="foot-note"><b>You see only your own record.</b> There is no route by which one analyst
+can read another's scores, and no field on this page is editable. The KPI breakdown shows the
+marks actually awarded, so a figure can be traced back to the KPI and month it came from.</p>
+{% endblock %}

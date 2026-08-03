@@ -1,0 +1,25 @@
+{% load static %}<!doctype html>
+{# Rendered with an empty context on purpose — nothing here may depend on the
+   request or the database, both of which may be what failed. #}
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Something went wrong — SMTI HUB</title>
+  <link rel="icon" href="{% static 'hub/favicon.svg' %}" type="image/svg+xml">
+  <link rel="stylesheet" href="{% static 'hub/app.css' %}">
+</head>
+<body class="auth-body">
+<main class="auth">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <div class="auth-word">Something went wrong</div>
+      <p class="auth-lede">The error has been reported. Nothing you were doing was saved.</p>
+    </div>
+    <p class="auth-foot">Try again in a moment. If it keeps happening, tell your manager what you
+      were doing at the time — that is what makes it findable in the log.
+      <a href="/">Back to your home page</a>.</p>
+  </div>
+</main>
+</body>
+</html>
