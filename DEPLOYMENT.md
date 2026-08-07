@@ -487,10 +487,27 @@ The environment did not reach the process. Check `env_file: .env` is present in
 environment — `.env` cannot be sourced into a shell, several values contain
 spaces and `<>`.
 
-**`password authentication failed for user "smti_web"`**
-The role's password and `POSTGRES_WEB_PASSWORD` in `.env` have diverged —
-usually `.env` was regenerated after step 2, or step 2 was skipped. Re-run
-`bootstrap_roles.sql` (it is idempotent), then `docker compose restart web`.
+**`password authentication failed for user "smti_web"` (or `smti_owner`)**
+The role's password and `.env` have diverged. Print what the app actually
+sends, which is not always what the file says:
+
+```bash
+docker compose exec -T web python -c "import os;from urllib.parse import urlparse;print(repr(urlparse(os.environ['DATABASE_URL']).password))"
+```
+
+If that differs from `grep POSTGRES_WEB_PASSWORD .env`, the password contains a
+character that does not survive the trip into `DATABASE_URL`: Compose truncates
+at `;`, and `urlparse` returns `None` when it contains `/` or `#`. Replace it
+with `secrets.token_urlsafe(24)` output, which is `[A-Za-z0-9_-]` only.
+
+If it matches, the database simply holds a different password — `.env` was
+changed after the role was created, or step 2 never ran. Either way re-run
+`bootstrap_roles.sql` (it is idempotent) and `docker compose up -d web`.
+
+Note that `POSTGRES_OWNER_PASSWORD` only reaches PostgreSQL when the data
+directory is first initialized. Changing it in `.env` afterwards changes what
+clients send, never what the server expects; correct the server with
+`ALTER ROLE smti_owner PASSWORD '...'`.
 
 **`DATABASE_URL must be a postgres:// URL`**
 Deliberate. Only PostgreSQL is supported; see the top of this guide.
