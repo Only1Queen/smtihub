@@ -3,7 +3,8 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends libpq5 libldap2 libsasl2-2 \
+# psycopg[binary] bundles libpq, so only the LDAP runtime libs are needed.
+RUN apt-get update && apt-get install -y --no-install-recommends libldap2 libsasl2-2 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
