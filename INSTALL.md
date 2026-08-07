@@ -199,11 +199,15 @@ Run these one at a time and read each result before moving on.
 
 ```bash
 cd /opt/smti-hub
-set -a; . ./.env; set +a          # loads your settings into this terminal
+OWNER=$(grep -m1 '^POSTGRES_OWNER=' .env | cut -d= -f2-)
+DB=$(grep -m1 '^POSTGRES_DB=' .env | cut -d= -f2-)
+WEB_PW=$(grep -m1 '^POSTGRES_WEB_PASSWORD=' .env | cut -d= -f2-)
 ```
 
-That last line only lasts for the terminal you're in. If you close it and come
-back later, run it again before any of the commands below.
+Those three lines only last for the terminal you're in. If you close it and
+come back later, run them again before any of the commands below. Don't try to
+load the whole file with `. ./.env` — some settings contain spaces and `<>`,
+which the app reads fine but the terminal chokes on.
 
 **1. Build the app and start the database**
 
@@ -216,7 +220,7 @@ The build takes a few minutes the first time. Wait for the database to be
 ready:
 
 ```bash
-docker compose exec db pg_isready -U "$POSTGRES_OWNER" -d "$POSTGRES_DB"
+docker compose exec db pg_isready -U "$OWNER" -d "$DB"
 ```
 
 It should say `accepting connections`.
@@ -224,8 +228,8 @@ It should say `accepting connections`.
 **2. Create the restricted database user**
 
 ```bash
-docker compose exec -T db psql -U "$POSTGRES_OWNER" -d "$POSTGRES_DB" \
-  -v web_password="'$POSTGRES_WEB_PASSWORD'" -f /deploy/bootstrap_roles.sql
+docker compose exec -T db psql -U "$OWNER" -d "$DB" \
+  -v web_password="'$WEB_PW'" -f /deploy/bootstrap_roles.sql
 ```
 
 **3. Create the tables**
@@ -239,13 +243,13 @@ Lots of `OK` lines. This also creates the first appraisal year for you.
 **4. Lock the activity log**
 
 ```bash
-docker compose exec -T db psql -U "$POSTGRES_OWNER" -d "$POSTGRES_DB" -f /deploy/grants.sql
+docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/grants.sql
 ```
 
 **5. Check the lock actually took**
 
 ```bash
-docker compose exec -T db psql -U "$POSTGRES_OWNER" -d "$POSTGRES_DB" -f /deploy/verify_grants.sql
+docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/verify_grants.sql
 ```
 
 This must print **`audit_append_only_ok | t`**. If it prints `f`, stop and fix
@@ -488,15 +492,16 @@ It restores into a *separate* database so it cannot damage the live one.
 
 ```bash
 cd /opt/smti-hub
-set -a; . ./.env; set +a
+OWNER=$(grep -m1 '^POSTGRES_OWNER=' .env | cut -d= -f2-)
+DB=$(grep -m1 '^POSTGRES_DB=' .env | cut -d= -f2-)
 
 BACKUP_PASSPHRASE=<yours> ./deploy/backup.sh     # always first
 git pull
 docker compose build
 docker compose run --rm admin python manage.py migrate
-docker compose exec -T db psql -U "$POSTGRES_OWNER" -d "$POSTGRES_DB" -f /deploy/grants.sql
+docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/grants.sql
 docker compose up -d web proxy
-docker compose exec -T db psql -U "$POSTGRES_OWNER" -d "$POSTGRES_DB" -f /deploy/verify_grants.sql
+docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/verify_grants.sql
 ```
 
 The `grants.sql` line is not optional. A new table arrives unprotected until it
@@ -534,7 +539,8 @@ docker compose up -d db web proxy    # start it again
 | "Too many attempts" and the password is right | It's the fifteen-minute lockout. Wait, or clear it: `docker compose run --rm admin python manage.py axes_reset_username <username>`. |
 | Somebody forgot their password (no AD) | `docker compose run --rm admin python manage.py changepassword <username>`, or use **Set password** on the Team screen. |
 | Nobody can sign in after turning on AD | Use your local manager account — it still works. Then set `LDAP_LOG_LEVEL=DEBUG` in `.env`, `docker compose up -d web`, and read `docker compose logs -f web` while trying again. |
-| `ImproperlyConfigured: DATABASE_URL is not set` | You forgot `set -a; . ./.env; set +a` in this terminal. |
+| `ImproperlyConfigured: DATABASE_URL is not set` | Run `manage.py` through `docker compose run --rm admin`, not on the host — Compose is what supplies the settings. |
+| `password authentication failed for user "smti_web"` | The database user's password no longer matches `POSTGRES_WEB_PASSWORD` in `.env` — usually because `.env` was regenerated after Part 5 step 2. Re-run that step, then `docker compose restart web`. |
 | `verify_grants.sql` prints `f` not `t` | Re-run step 4 of Part 5 (`grants.sql`), then check again. Don't let people sign in until it says `t`. |
 | A score won't save, message about the month being scored | Working as designed — the month is closed. Reopen it if the correction is genuine. |
 | No emails arriving | With `EMAIL_HOST` blank they are written to the log instead: `docker compose logs web`. Fill in the relay details in `.env` and `docker compose up -d web`. |

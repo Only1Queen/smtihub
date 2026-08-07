@@ -120,25 +120,30 @@ habit is what phishing relies on.
 
 ```bash
 cd /opt/smti-hub
-set -a; . ./.env; set +a          # load .env into this shell
+
+# Read the three database settings out of .env. Do not `. ./.env`: values like
+# DJANGO_ADMINS contain spaces and <>, which Compose accepts and bash does not.
+OWNER=$(grep -m1 '^POSTGRES_OWNER=' .env | cut -d= -f2-)
+DB=$(grep -m1 '^POSTGRES_DB=' .env | cut -d= -f2-)
+WEB_PW=$(grep -m1 '^POSTGRES_WEB_PASSWORD=' .env | cut -d= -f2-)
 
 # 1. Build images and start PostgreSQL
 docker compose build
 docker compose up -d db
-docker compose exec db pg_isready -U "$POSTGRES_OWNER" -d "$POSTGRES_DB"
+docker compose exec db pg_isready -U "$OWNER" -d "$DB"
 
 # 2. Create the restricted application role
-docker compose exec -T db psql -U "$POSTGRES_OWNER" -d "$POSTGRES_DB" \
-  -v web_password="'$POSTGRES_WEB_PASSWORD'" -f /deploy/bootstrap_roles.sql
+docker compose exec -T db psql -U "$OWNER" -d "$DB" \
+  -v web_password="'$WEB_PW'" -f /deploy/bootstrap_roles.sql
 
 # 3. Run migrations as the owner (creates tables, seeds FY 2026-27)
 docker compose run --rm admin python manage.py migrate
 
 # 4. Lock down the audit table
-docker compose exec -T db psql -U "$POSTGRES_OWNER" -d "$POSTGRES_DB" -f /deploy/grants.sql
+docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/grants.sql
 
 # 5. Prove it worked — must print audit_append_only_ok = t
-docker compose exec -T db psql -U "$POSTGRES_OWNER" -d "$POSTGRES_DB" -f /deploy/verify_grants.sql
+docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/verify_grants.sql
 
 # 6. Start the application and proxy
 docker compose up -d web proxy
@@ -283,15 +288,16 @@ deactivated for a reason of the hub's own.
 
 ```bash
 cd /opt/smti-hub
-set -a; . ./.env; set +a
+OWNER=$(grep -m1 '^POSTGRES_OWNER=' .env | cut -d= -f2-)
+DB=$(grep -m1 '^POSTGRES_DB=' .env | cut -d= -f2-)
 
 BACKUP_PASSPHRASE=<yours> ./deploy/backup.sh        # always back up first
 git pull                                            # or copy the new code in
 docker compose build
 docker compose run --rm admin python manage.py migrate
-docker compose exec -T db psql -U "$POSTGRES_OWNER" -d "$POSTGRES_DB" -f /deploy/grants.sql
+docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/grants.sql
 docker compose up -d web proxy
-docker compose exec -T db psql -U "$POSTGRES_OWNER" -d "$POSTGRES_DB" -f /deploy/verify_grants.sql
+docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/verify_grants.sql
 ```
 
 **Re-run `grants.sql` after every migrate.** A migration that creates a table
@@ -475,9 +481,16 @@ task-approval and month-freeze rules, access control, and audit immutability.
 ## 7. Troubleshooting
 
 **`ImproperlyConfigured: DATABASE_URL is not set`**
-The environment did not reach the process. In a shell, `set -a; . ./.env; set +a`.
-In Compose, check `env_file: .env` is present and `.env` sits beside
-`docker-compose.yml`.
+The environment did not reach the process. Check `env_file: .env` is present in
+`docker-compose.yml` and that `.env` sits beside it. Run `manage.py` through
+`docker compose run --rm admin` rather than on the host, so Compose supplies the
+environment — `.env` cannot be sourced into a shell, several values contain
+spaces and `<>`.
+
+**`password authentication failed for user "smti_web"`**
+The role's password and `POSTGRES_WEB_PASSWORD` in `.env` have diverged —
+usually `.env` was regenerated after step 2, or step 2 was skipped. Re-run
+`bootstrap_roles.sql` (it is idempotent), then `docker compose restart web`.
 
 **`DATABASE_URL must be a postgres:// URL`**
 Deliberate. Only PostgreSQL is supported; see the top of this guide.
