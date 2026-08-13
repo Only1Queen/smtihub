@@ -1,0 +1,54 @@
+{% extends "hub/base.html" %}{% load hub_extras %}
+{% block title %}Daily updates — SMTI HUB{% endblock %}
+{% block crumb %}<b>Daily updates</b>{% endblock %}
+{% block content %}
+<h1>Daily updates</h1>
+<p class="sub">Last {{ day_count }} days · {{ start|date:"j M" }} to {{ today|date:"j M Y" }}.
+  A day counts as covered if anything was posted on any task that day.</p>
+
+<div class="card">
+  <div class="card-head"><span class="card-title">Coverage</span>
+    <span class="card-note">weekends are not counted as missed</span></div>
+  <div class="tw">
+    <table class="update-grid">
+      <thead><tr>
+        <th class="stick">Analyst</th>
+        {% for day in days %}
+          <th class="{% if day.weekday >= 5 %}wknd{% endif %}" title="{{ day|date:'l j M Y' }}">
+            <span class="dow">{{ day|date:"D"|slice:":1" }}</span>
+            <span class="dom">{{ day|date:"j" }}</span></th>
+        {% endfor %}
+        <th style="text-align:right">Posted</th>
+        <th style="text-align:right">Missed</th>
+      </tr></thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>
+          <td class="stick"><div class="who-cell"><div class="avatar">{{ row.employee.initials }}</div>
+            <div><div style="font-weight:600">{{ row.employee.name }}</div>
+              <div style="font-size:11.5px;color:var(--faint)">{{ row.employee.job_title }}</div></div></div></td>
+          {% for cell in row.cells %}
+            <td class="day-cell">
+              <span class="day {% if cell.weekend %}wknd{% elif cell.posted %}yes{% elif cell.idle %}idle{% else %}no{% endif %}{% if cell.today %} now{% endif %}" title="{{ cell.date|date:'l j M' }} — {% if cell.weekend %}weekend{% elif cell.posted %}update posted{% elif cell.idle %}no open task{% else %}no update{% endif %}"></span>
+            </td>
+          {% endfor %}
+          <td class="num"><span class="score s-good">{{ row.posted }}</span>
+            <span style="color:var(--faint)">/{{ row.expected }}</span></td>
+          <td class="num"><span class="score {% if row.missed %}s-bad{% else %}s-none{% endif %}">{{ row.missed }}</span></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="3" style="text-align:center;color:var(--faint);padding:26px">
+          Nobody to show yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="legend">
+    <span><span class="day yes"></span> update posted</span>
+    <span><span class="day no"></span> missed — a task was open that day</span>
+    <span><span class="day idle"></span> nothing assigned</span>
+    <span><span class="day wknd"></span> weekend</span>
+    <span><span class="day yes now"></span> today</span>
+  </div>
+</div>
+{% endblock %}

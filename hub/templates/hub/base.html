@@ -22,12 +22,16 @@
         <a href="{% url 'team' %}"><button {% if screen == 'team' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-team"></use></svg>Team</button></a>
         <a href="{% url 'goals' %}"><button {% if screen == 'goals' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-goals"></use></svg>Goals</button></a>
         <a href="{% url 'tasks' %}"><button {% if screen == 'tasks' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-tasks"></use></svg>Tasks<span class="badge {% if pending_count %}on{% endif %}">{{ pending_count }}</span></button></a>
+        <a href="{% url 'updates_dashboard' %}"><button {% if screen == 'updates' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-clock"></use></svg>Daily updates</button></a>
         <a href="{% url 'year_summary' %}"><button {% if screen == 'summary' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-summary"></use></svg>Year summary</button></a>
         <a href="{% url 'activity' %}"><button {% if screen == 'activity' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-activity"></use></svg>Activity</button></a>
       {% endif %}
       <div class="nav-label">{% if is_manager %}Analyst view{% else %}My record{% endif %}</div>
       <a href="{% url 'my_appraisal' %}"><button {% if screen == 'mine' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-mine"></use></svg>My appraisal</button></a>
       <a href="{% url 'my_tasks' %}"><button {% if screen == 'mytasks' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-mytasks"></use></svg>My tasks</button></a>
+      {% if not is_manager %}
+        <a href="{% url 'updates_dashboard' %}"><button {% if screen == 'updates' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-clock"></use></svg>Daily updates</button></a>
+      {% endif %}
       <div class="nav-label">Account</div>
       <a href="{% url 'settings' %}"><button {% if screen == 'settings' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-settings"></use></svg>Settings</button></a>
     </nav>
@@ -49,6 +53,8 @@
         <div class="spacer"></div>
         {% if open_year %}
           <span class="pill mono">{{ open_year.label }}</span>
+          <span class="pill mono" id="yearClock" data-ends="{{ open_year.ends_at.isoformat }}"
+                title="Time left in {{ open_year.label }}">…</span>
           {% if open_year.closed %}
             <span class="pill closed mono"><svg class="ic-xs" aria-hidden="true"><use href="#i-lock"></use></svg>Closed</span>
           {% else %}

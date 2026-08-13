@@ -9,7 +9,7 @@
       </div>
     {% else %}
       {# Prose and lists of choices read badly squeezed into one column. #}
-      <div class="f-col{% if field.widget_type == 'textarea' or field.widget_type == 'checkboxselectmultiple' %} wide{% endif %}"
+      <div class="f-col{% if field.widget_type == 'textarea' or field.widget_type == 'checkboxselectmultiple' or field.widget_type == 'radioselect' %} wide{% endif %}"
            id="row-{{ field.name }}">
         <label for="{{ field.id_for_label }}">{{ field.label }}</label>
         {{ field }}

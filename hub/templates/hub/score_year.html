@@ -1,0 +1,89 @@
+{% extends "hub/base.html" %}{% load hub_extras %}
+{% block title %}Year scores — SMTI HUB{% endblock %}
+{% block crumb %}<a href="{% url 'team' %}" style="color:var(--muted)">Team</a> /
+  <b>{{ employee.name }}</b> / {{ year.label }}{% endblock %}
+{% block content %}
+<h1>{{ employee.name }} — whole year</h1>
+<p class="sub">{{ employee.job_title }} · every goal, every month of {{ year.label }}. Type a mark
+  and it saves itself.</p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-k">Year to date</div>
+    <div class="stat-v {{ annual|band_class }}">{% if annual %}{{ annual|floatformat:0 }}%{% else %}—{% endif %}</div>
+    <div class="stat-n">{{ complete }}/12 months complete</div></div>
+  <div class="stat"><div class="stat-k">Goals counting</div>
+    <div class="stat-v">{{ applied }}<span style="font-size:14px;color:var(--faint)">/{{ groups|length }}</span></div>
+    <div class="stat-n">a goal with nobody assigned counts for everyone</div></div>
+  <div class="stat"><div class="stat-k">Analyst view</div>
+    <div class="stat-v" style="font-size:15px;padding-top:6px">
+      <a href="{% url 'employee_appraisal' employee.pk %}"><button class="btn">See what they see</button></a></div>
+    <div class="stat-n">their own screen, read-only</div></div>
+</div>
+
+<div class="card">
+  <div class="card-head"><span class="card-title">Score sheet</span>
+    <span class="card-note">A month is closed from its own month view — pick the month name</span></div>
+
+  <div class="tw" id="scoreGrid" data-csrf="{{ csrf_token }}">
+    <table class="year-grid">
+      <thead><tr>
+        <th class="stick">KPI</th>
+        {% for col in month_cols %}
+          <th class="{% if col.quarter_end %}qe-col{% endif %}" style="text-align:center">
+            <a href="{% url 'score_entry' employee.pk col.index %}" style="color:inherit">{{ col.label }}</a>
+            {% if col.frozen %}<svg class="ic-xs" aria-hidden="true"><use href="#i-lock"></use></svg>{% endif %}
+          </th>
+        {% endfor %}
+        <th style="text-align:right">Goal YTD</th>
+      </tr></thead>
+      <tbody>
+      {% for group in groups %}
+        <tr class="goal-row">
+          <td class="stick"><span class="goal-code">{{ group.goal.code }}</span>
+            <span class="goal-name">{{ group.goal.name }}</span></td>
+          <td colspan="12" style="color:var(--faint);font-size:12px">{{ group.marks }} marks
+            {% if not group.applies %}· <b>not {{ employee.name }}'s</b> — assigned to
+              {{ group.assigned_to }}. <a href="{% url 'goal_edit' group.goal.pk %}">Change that</a>
+              to score it here.{% endif %}</td>
+          <td class="num"><span class="score {{ group.band }}">
+            {% if group.percent %}{{ group.percent|floatformat:0 }}%{% else %}—{% endif %}</span></td>
+        </tr>
+        {% for row in group.rows %}
+          <tr class="{% if not group.applies %}row-locked{% endif %}">
+            <td class="stick">
+              <span class="mono" style="font-weight:600;color:var(--accent)">{{ row.kpi.code }}</span>
+              <div class="kpi-text" style="font-size:12px">{{ row.kpi.text }}</div>
+              <div class="kpi-sub">out of {{ row.kpi.max_marks }}{% if row.kpi.quarterly %} · quarterly{% endif %}{% if row.auto %} · from approved tasks{% endif %}</div>
+            </td>
+            {% for cell in row.cells %}
+              <td class="grid-cell">
+                {% if not cell.eligible %}
+                  <span style="color:var(--faint)">—</span>
+                {% elif cell.editable %}
+                  <input type="number" min="0" max="{{ row.kpi.max_marks }}" step="0.5"
+                         value="{{ cell.value|floatformat:'-1'|default_if_none:'' }}"
+                         data-kpi="{{ row.kpi.pk }}" data-max="{{ row.kpi.max_marks }}"
+                         data-url="{% url 'score_save' employee.pk cell.month %}"
+                         aria-label="{{ row.kpi.code }} {{ cell.month }}">
+                {% else %}
+                  <span class="{% if cell.frozen %}mono{% else %}tag q mono{% endif %}">{{ cell.value|floatformat:"-1"|default:"—" }}</span>
+                {% endif %}
+              </td>
+            {% endfor %}
+            <td></td>
+          </tr>
+        {% endfor %}
+      {% empty %}
+        <tr><td colspan="14" style="text-align:center;color:var(--faint);padding:26px">
+          {{ year.label }} has no goals yet. <a href="{% url 'goal_new' %}">Create one</a>.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="saveline">
+    <span class="dot-ok"></span><span id="saveState">All changes saved</span>
+  </div>
+</div>
+
+{% endblock %}

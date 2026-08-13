@@ -29,9 +29,10 @@
         <a href="{% url 'goal_edit' row.goal.pk %}"><button class="btn sm">Edit</button></a></div>
       {% if row.goal.description %}<div class="gc-desc">{{ row.goal.description }}</div>{% endif %}
       <div class="gc-assign">
-        <span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600">Assigned</span>
+        <span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600">
+          {% if row.assigned %}Assigned{% else %}Whole team{% endif %}</span>
         {% for person in team %}
-          <span class="chip {% if person not in row.assigned %}off{% endif %}">
+          <span class="chip {% if row.assigned and person not in row.assigned %}off{% endif %}">
             <span class="avatar">{{ person.initials }}</span>{{ person.name }}</span>
         {% empty %}
           <span style="font-size:12px;color:var(--faint)">No analysts yet —
@@ -60,6 +61,4 @@
 {% endfor %}
 </div>
 
-<p class="foot-note"><b>Assignment changes who is measured.</b> A goal assigned to three of five
-analysts is excluded from the other two entirely — it does not count against them as a zero.</p>
 {% endblock %}

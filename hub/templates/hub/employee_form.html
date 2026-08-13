@@ -7,10 +7,6 @@
 <div class="card">
   <form method="post" class="form-body">{% csrf_token %}
     {% include "hub/_form.html" %}
-    <p class="dlg-note">Scores start empty. Adding or editing an analyst is recorded in the
-      activity log, and granting the manager role is recorded separately. An Active Directory
-      account signs in with its Windows password; a local account needs one set with
-      <b>Set password</b> on the team page before it can sign in.</p>
     <div class="dlg-actions">
       <a href="{% url 'team' %}"><button type="button" class="btn ghost">Cancel</button></a>
       <button class="btn primary" type="submit">Save</button></div>

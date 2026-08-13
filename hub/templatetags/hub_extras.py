@@ -5,14 +5,29 @@ from hub import scoring
 register = template.Library()
 
 STATUS_CLASS = {
-    "not_started": "st-idle", "in_progress": "st-prog", "submitted": "st-wait",
-    "approved": "st-done", "returned": "st-back",
+    "not_started": "st-idle", "picked_up": "st-pick", "in_progress": "st-prog",
+    "on_track": "st-near", "submitted": "st-wait", "approved": "st-done",
+    "returned": "st-back",
+    "": "st-idle",  # a daily update, which moves nothing
 }
 
 
 @register.filter
 def status_class(status):
     return STATUS_CLASS.get(status, "st-idle")
+
+
+@register.filter
+def update_label(proposed_status):
+    """What the analyst did, not what it left the task waiting for. "Awaiting
+    review" on their own update line reads as somebody else's state."""
+    from hub.models import Task
+
+    if not proposed_status:
+        return "Daily update"
+    if proposed_status == Task.SUBMITTED:
+        return "Sent for review"
+    return dict(Task.STATUS_CHOICES).get(proposed_status, proposed_status)
 
 
 @register.filter

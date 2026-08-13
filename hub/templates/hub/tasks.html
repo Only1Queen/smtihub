@@ -3,44 +3,79 @@
 {% block crumb %}<b>Tasks</b>{% endblock %}
 {% block content %}
 <h1>Tasks</h1>
-<p class="sub">Assign work, approve what the team submits, and decide what counts toward a goal.</p>
+<p class="sub">Assign work, review what the team completes, and decide what counts toward a goal.</p>
 
 <div class="stats">
-  <div class="stat"><div class="stat-k">Awaiting your approval</div>
+  <div class="stat"><div class="stat-k">Waiting on you</div>
     <div class="stat-v {% if pending %}s-warn{% endif %}">{{ pending|length }}</div>
-    <div class="stat-n">nothing counts until approved</div></div>
+    <div class="stat-n">completed, needs review</div></div>
   <div class="stat"><div class="stat-k">Open this month</div><div class="stat-v">{{ open_count }}</div>
-    <div class="stat-n">{{ months|index:month|index:1 }}</div></div>
+    <div class="stat-n">of {{ month_total }} in {{ months|index:month|index:1 }}</div></div>
   <div class="stat"><div class="stat-k">Goal-linked</div><div class="stat-v">{{ linked }}</div>
     <div class="stat-n">the rest are operational</div></div>
   <div class="stat"><div class="stat-k">Assign work</div>
     <div class="stat-v" style="font-size:15px;padding-top:6px">
       <a href="{% url 'task_new' %}"><button class="btn primary">+ New task</button></a></div>
-    <div class="stat-n">goal-linked or standalone</div></div>
+    <div class="stat-n">one or several analysts</div></div>
 </div>
 
 <div class="card">
-  <div class="card-head"><span class="card-title">Awaiting approval</span>
+  <div class="card-head"><span class="card-title">Completed — waiting for your review</span>
     <span class="card-note">Approving a goal-linked task moves the score immediately</span></div>
   {% for item in pending %}{% include "hub/_task.html" %}{% empty %}
     <div style="padding:26px 18px;text-align:center;color:var(--faint);font-size:13px">
-      Nothing to approve. The team is up to date.</div>
+      Nothing to review. The team is up to date.</div>
   {% endfor %}
 </div>
 
 <div class="card">
-  <div class="card-head"><span class="card-title">All tasks · {{ months|index:month|index:1 }}</span>
+  <div class="card-head"><span class="card-title">By analyst · {{ months|index:month|index:1 }}</span>
     <div class="spacer" style="flex:1"></div>
     <form method="get" style="margin:0"><select name="month" onchange="this.form.submit()">
       {% for i, label in months %}<option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ label }}</option>{% endfor %}
     </select></form></div>
-  {% for item in rest %}{% include "hub/_task.html" %}{% empty %}
+
+  {% for person in people %}
+    <div class="tw"><table>
+      <thead><tr>
+        <th style="width:230px">
+          <span class="who-cell"><span class="avatar">{{ person.employee.initials }}</span>
+            <span style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--text)">
+              {{ person.employee.name }}</span></span></th>
+        <th>Task</th>
+        <th style="width:150px">Progress</th>
+        <th style="width:130px">Counts toward</th>
+        <th style="width:110px">Due</th>
+        <th style="width:100px;text-align:right">{{ person.open }} open</th>
+      </tr></thead>
+      <tbody>
+      {% for item in person.items %}
+        <tr>
+          <td></td>
+          <td><a href="{% url 'task_detail' item.task.pk %}" class="task-title">{{ item.task.title }}</a>
+            {% if item.latest %}
+              <div class="kpi-sub">{{ item.latest.submitted_at|date:"j M, H:i" }} ·
+                {{ item.latest.note|default:"(no note)"|truncatechars:90 }}</div>
+            {% endif %}</td>
+          <td><span class="st {{ item.task.status|status_class }}">{{ item.task.get_status_display }}</span></td>
+          <td>{% if item.task.kpi %}
+              <span class="link-tag">{{ item.task.kpi.code }} · {{ item.task.weight }}%</span>
+            {% elif item.task.grade is not None %}
+              <span class="link-tag">graded {{ item.task.grade }}/100</span>
+            {% else %}<span class="link-none">operational</span>{% endif %}</td>
+          <td class="mono" style="font-size:12px;color:var(--muted)">
+            {{ item.task.due_date|date:"j M Y"|default:"—" }}</td>
+          <td style="text-align:right">
+            {% if item.task.status == 'submitted' %}
+              <a href="{% url 'task_decide' item.task.pk %}"><button class="btn sm primary">Review</button></a>
+            {% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  {% empty %}
     <div style="padding:26px 18px;text-align:center;color:var(--faint);font-size:13px">
-      No tasks for this month yet.</div>
+      No tasks for this month yet. <a href="{% url 'task_new' %}">Assign some</a>.</div>
   {% endfor %}
 </div>
-
-<p class="foot-note"><b>Operational tasks carry no marks.</b> Migrations, shift handovers and
-vendor calls are tracked here so you get daily visibility, but they touch no KPI and cannot move
-anyone's appraisal. Only tasks with a KPI and a weight do that.</p>
 {% endblock %}

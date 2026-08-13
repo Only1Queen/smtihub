@@ -3,13 +3,11 @@
 {% block crumb %}<a href="{% url 'tasks' %}" style="color:var(--muted)">Tasks</a> / <b>New task</b>{% endblock %}
 {% block content %}
 <h1>New task</h1>
-<p class="sub">Assign work. Linking it to a KPI makes it count toward that goal.</p>
+<p class="sub">Assign work to one analyst or several. Linking it to a KPI makes it count toward
+  that goal.</p>
 <div class="card">
   <form method="post" class="form-body">{% csrf_token %}
     {% include "hub/_form.html" %}
-    <p class="dlg-note">Leave <b>Counts toward</b> empty for operational work: it appears in the
-      analyst's list and still needs your approval to close, but carries no marks. A task's scoring
-      month is set explicitly, so it never shifts if the due date moves.</p>
     <div class="dlg-actions">
       <a href="{% url 'tasks' %}"><button type="button" class="btn ghost">Cancel</button></a>
       <button class="btn primary" type="submit">Create task</button></div>

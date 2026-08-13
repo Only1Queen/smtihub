@@ -34,9 +34,13 @@
     say(bad ? "Score exceeds the KPI maximum — not saved" : "Saving…", bad);
     if (bad) return;
 
-    clearTimeout(timers[input.dataset.kpi]);
-    timers[input.dataset.kpi] = setTimeout(function () { save(input); }, 450);
+    // Keyed per cell: the year grid has the same KPI twelve times over.
+    var key = urlOf(input) + "#" + input.dataset.kpi;
+    clearTimeout(timers[key]);
+    timers[key] = setTimeout(function () { save(input); }, 450);
   });
+
+  function urlOf(input) { return input.dataset.url || grid.dataset.saveUrl; }
 
   function save(input) {
     var body = new URLSearchParams({
@@ -45,14 +49,23 @@
       updated_at: input.dataset.updatedAt || "",
       csrfmiddlewaretoken: grid.dataset.csrf
     });
-    fetch(grid.dataset.saveUrl, { method: "POST", body: body, headers: { "X-Requested-With": "fetch" } })
+    fetch(urlOf(input), { method: "POST", body: body, headers: { "X-Requested-With": "fetch" } })
       .then(function (r) { return r.text().then(function (t) { return { ok: r.ok, status: r.status, html: t }; }); })
       .then(function (r) {
         var line = document.getElementById("saveline");
+        // The year grid has no month totals to swap in — it just reports.
+        if (!line) { say(r.ok ? "Saved" : strip(r.html), !r.ok); return; }
         if (r.status === 409 || r.status === 400) { line.innerHTML = r.html; return; }
         line.outerHTML = r.html;
       })
       .catch(function () { say("Could not reach the server — not saved", true); });
+  }
+
+  // The server's error fragment is HTML; only its text belongs in the status line.
+  function strip(html) {
+    var d = document.createElement("div");
+    d.innerHTML = html;
+    return d.textContent.trim() || "Not saved";
   }
 
   function say(text, isError) {
@@ -61,6 +74,26 @@
     el.textContent = text;
     el.className = isError ? "err" : "";
   }
+})();
+
+// Appraisal year countdown in the topbar, ticking once a second.
+(function () {
+  var el = document.getElementById("yearClock");
+  if (!el) return;
+  var ends = new Date(el.dataset.ends).getTime();
+  if (isNaN(ends)) { el.remove(); return; }
+
+  function pad(n) { return n < 10 ? "0" + n : String(n); }
+
+  function tick() {
+    var left = ends - Date.now();
+    if (left <= 0) { el.textContent = "year ended"; return; }
+    var s = Math.floor(left / 1000);
+    el.textContent = pad(Math.floor(s / 3600) % 24) + ":" +
+                     pad(Math.floor(s / 60) % 60) + ":" + pad(s % 60);
+    setTimeout(tick, 1000 - (Date.now() % 1000));
+  }
+  tick();
 })();
 
 // Goal detail rows on the analyst view.
