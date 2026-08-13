@@ -11,13 +11,14 @@ from django.utils import timezone
 
 from hub import scoring
 from hub.audit import log_event
-from hub.models import (AppraisalYear, GoalAssignment, Kpi, Score, ScoredMonth, Task,
-                        TaskUpdate, month_is_scored)
+from hub.models import (AppraisalYear, Kpi, Score, ScoredMonth, Task, TaskUpdate,
+                        month_is_scored)
+from hub.models import assigned_goal_ids as models_assigned_goal_ids
 
 
 def assigned_goal_ids(employee, year):
-    return set(GoalAssignment.objects.filter(
-        employee=employee, goal__year=year).values_list("goal_id", flat=True))
+    """One rule, defined on the model so Task validation shares it."""
+    return models_assigned_goal_ids(employee, year)
 
 
 def year_kpis(year):
@@ -193,18 +194,78 @@ class ConflictError(Exception):
 
 
 @transaction.atomic
-def submit_update(task, author, note, proposed_status=Task.APPROVED):
-    update = TaskUpdate.objects.create(task=task, author=author, note=note,
-                                       proposed_status=proposed_status)
-    task.status = Task.SUBMITTED
+def submit_update(task, author, note="", new_status=Task.SUBMITTED):
+    """The analyst moving their own task along.
+
+    Only "completed" asks for anything: it enters the approval queue. The rungs
+    below it record where the work has got to and leave the task with them.
+    """
+    if new_status not in Task.ANALYST_STATUSES:
+        raise ValueError(f"{new_status} is not a status an analyst can set.")
+    complete = new_status == Task.SUBMITTED
+    before = task.get_status_display()
+
+    update = TaskUpdate.objects.create(
+        task=task, author=author, note=note, proposed_status=new_status,
+        decision=TaskUpdate.PENDING if complete else TaskUpdate.NOT_NEEDED)
+    task.status = new_status
     task.save(update_fields=["status"])
-    log_event(author.user, "task.submit", f"{author.name} · {task.title}",
-              after="awaiting approval")
+    log_event(author.user, "task.submit" if complete else "task.progress",
+              f"{author.name} · {task.title}",
+              before=before, after=task.get_status_display())
     return update
 
 
 @transaction.atomic
-def decide_update(update, actor, approve, note=""):
+def daily_update(task, author, note):
+    """A day's note against a task, with no change of status.
+
+    Stored as an ordinary TaskUpdate so it lands in the same trail the manager
+    reads — a parallel table would have split one conversation in two.
+    """
+    if not note.strip():
+        raise ValueError("A daily update needs something in it.")
+    update = TaskUpdate.objects.create(task=task, author=author, note=note.strip(),
+                                       proposed_status="", decision=TaskUpdate.NOT_NEEDED)
+    log_event(author.user, "task.daily", f"{author.name} · {task.title}",
+              after=task.get_status_display())
+    return update
+
+
+def expected_days(employee, days):
+    """The days this analyst actually owed an update: ones where they were
+    holding a task that was not yet completed.
+
+    Without this every day before their first task counts as missed, and a grid
+    that is red for everybody says nothing about anybody.
+    """
+    spans = []
+    for task in Task.objects.filter(assignee=employee).prefetch_related("updates"):
+        start = timezone.localtime(task.created_at).date()
+        finished = None
+        if task.approved:
+            decision = task.updates.filter(decision=TaskUpdate.APPROVED).first()
+            finished = (timezone.localtime(decision.decided_at).date()
+                        if decision and decision.decided_at else start)
+        spans.append((start, finished))
+    return {d for d in days
+            if any(s <= d and (e is None or d <= e) for s, e in spans)}
+
+
+def update_days(employee, start, end):
+    """The dates this analyst posted anything, between two dates inclusive.
+
+    Local dates, not UTC: an update posted at 9pm in Lagos belongs to that day,
+    and the grid is read by people who were there when it happened.
+    """
+    stamps = (TaskUpdate.objects.filter(author=employee, submitted_at__date__gte=start,
+                                        submitted_at__date__lte=end)
+              .values_list("submitted_at", flat=True))
+    return {timezone.localtime(s).date() for s in stamps}
+
+
+@transaction.atomic
+def decide_update(update, actor, approve, note="", grade=None):
     """The only way a task's status changes. Approving a KPI-linked task moves
     that analyst's live score, which is logged alongside the approval."""
     task = update.task
@@ -220,12 +281,17 @@ def decide_update(update, actor, approve, note=""):
     update.save()
 
     task.status = Task.APPROVED if approve else Task.RETURNED
-    task.save(update_fields=["status"])
+    # Only for work with no KPI: a KPI task's mark is the rollup, and a second
+    # number would contradict it.
+    if grade is not None and not task.counts_toward_score:
+        task.grade = grade
+    task.save(update_fields=["status", "grade"])
 
     log_event(actor, "task.approve" if approve else "task.return",
               f"{task.assignee.name} · {task.title}",
               before="submitted", after="approved" if approve else "returned",
-              reason=note or None)
+              reason=note or None,
+              grade=task.grade if not task.counts_toward_score else None)
 
     if task.counts_toward_score:
         after = scoring.task_rollup(task.kpi.max_marks,

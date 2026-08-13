@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -250,12 +251,23 @@ def tasks(request):
     qs = Task.objects.filter(year=year).select_related("assignee__user", "kpi__goal")
     pending = [_task_context(t) for t in qs.filter(status=Task.SUBMITTED)]
     rest = [_task_context(t) for t in qs.filter(scoring_month=month).exclude(status=Task.SUBMITTED)]
+
+    # Grouped by analyst: the flat list answered "what is outstanding" but never
+    # "what is this person carrying", which is the question in a one-to-one.
+    by_person = {}
+    for item in rest:
+        by_person.setdefault(item["task"].assignee, []).append(item)
+    people = [{"employee": e, "items": items,
+               "open": len([i for i in items if not i["task"].approved])}
+              for e, items in sorted(by_person.items(), key=lambda kv: kv[0].name)]
+
     return render(request, "hub/tasks.html", {
         "screen": "tasks",
-        "pending": pending, "rest": rest, "month": month,
+        "pending": pending, "people": people, "month": month,
         "months": list(enumerate(scoring.MONTHS)), "year": year,
         "linked": qs.filter(scoring_month=month, kpi__isnull=False).count(),
         "open_count": qs.filter(scoring_month=month).exclude(status=Task.APPROVED).count(),
+        "month_total": qs.filter(scoring_month=month).count(),
     })
 
 
@@ -274,16 +286,93 @@ def task_new(request):
                     initial={"scoring_month": _current_month(year)})
     if request.method == "POST" and form.is_valid():
         try:
-            task = form.save(created_by=request.user)
+            created = form.save(created_by=request.user)
         except ValidationError as exc:
             for msg in exc.messages:
                 form.add_error(None, msg)
         else:
-            log_event(request.user, "task.create", f"{task.assignee.name} · {task.title}",
-                      after=f"{task.kpi.code} · {task.weight}%" if task.kpi else "operational")
-            messages.success(request, "Task created.")
+            # One audit row per analyst: each of these is a separate task with
+            # its own approval and its own marks.
+            for task in created:
+                log_event(request.user, "task.create", f"{task.assignee.name} · {task.title}",
+                          after=f"{task.kpi.code} · {task.weight}%" if task.kpi else "operational")
+            messages.success(request, f"{len(created)} task{'' if len(created) == 1 else 's'} created.")
             return redirect("tasks")
     return render(request, "hub/task_form.html", {"form": form, "year": year})
+
+
+@login_required
+def task_detail(request, pk):
+    """Everything about one task on one page: what it is, where it is, the whole
+    trail, and the box the analyst drops a daily update into."""
+    task = get_object_or_404(Task.objects.select_related("assignee__user", "kpi__goal"), pk=pk)
+    mine = permissions.can_submit_update(request.user, task)
+    require(mine or permissions.can_decide_task(request.user, task)
+            or permissions.can_view_employee(request.user, task.assignee),
+            "That task is not yours to read.")
+
+    if request.method == "POST":
+        require(mine, "Only the analyst who owns a task can post updates on it.")
+        try:
+            services.daily_update(task, permissions.employee_of(request.user),
+                                  request.POST.get("note", ""))
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, "Daily update posted.")
+        return redirect("task_detail", pk=task.pk)
+
+    return render(request, "hub/task_detail.html", {
+        "task": task, "trail": list(task.updates.all()), "mine": mine,
+        "can_decide": permissions.can_decide_task(request.user, task),
+        "screen": "mytasks" if mine else "tasks",
+        "overdue": bool(task.due_date and task.due_date < timezone.localdate()
+                        and not task.approved),
+    })
+
+
+DASHBOARD_DAYS = 28
+
+
+@login_required
+def updates_dashboard(request):
+    """Who posted an update on which day. Managers see the team, analysts see
+    themselves. Weekends are marked, not counted as missed."""
+    me = permissions.employee_of(request.user)
+    people = list(team_of(request.user).filter(active=True)) if permissions.is_manager(request.user) \
+        else ([me] if me else [])
+    if me and permissions.is_manager(request.user) and me not in people:
+        people = [me] + people
+
+    today = timezone.localdate()
+    start = today - timedelta(days=DASHBOARD_DAYS - 1)
+    days = [start + timedelta(days=i) for i in range(DASHBOARD_DAYS)]
+
+    rows = []
+    for person in people:
+        posted = services.update_days(person, start, today)
+        owed = services.expected_days(person, days)
+        cells = []
+        for d in days:
+            weekend = d.weekday() >= 5
+            expected = d in owed and not weekend
+            cells.append({
+                "date": d, "posted": d in posted, "weekend": weekend,
+                "today": d == today, "expected": expected,
+                "missed": expected and d not in posted,
+                "idle": not weekend and d not in owed,
+            })
+        rows.append({
+            "employee": person, "cells": cells,
+            "posted": len([c for c in cells if c["posted"]]),
+            "missed": len([c for c in cells if c["missed"]]),
+            "expected": len([c for c in cells if c["expected"]]),
+        })
+
+    return render(request, "hub/updates_dashboard.html", {
+        "screen": "updates", "rows": rows, "days": days,
+        "start": start, "today": today, "day_count": DASHBOARD_DAYS,
+    })
 
 
 @login_required
@@ -291,11 +380,12 @@ def task_submit(request, pk):
     task = get_object_or_404(Task, pk=pk)
     require(permissions.can_submit_update(request.user, task),
             "You can only submit updates on your own tasks.")
-    form = TaskUpdateForm(request.POST or None)
+    form = TaskUpdateForm(request.POST or None, task=task)
     if request.method == "POST" and form.is_valid():
         services.submit_update(task, permissions.employee_of(request.user),
-                               form.cleaned_data["note"])
-        messages.success(request, "Sent to your manager for approval.")
+                               form.cleaned_data["note"], form.cleaned_data["status"])
+        messages.success(request, "Sent to your manager to review and grade." if form.complete
+                         else f"Marked {form.cleaned_data['status'].replace('_', ' ')}.")
         return redirect("my_tasks")
     return render(request, "hub/task_submit.html", {"form": form, "task": task})
 
@@ -308,13 +398,20 @@ def task_decide(request, pk):
     update = task.updates.filter(decision=TaskUpdate.PENDING).first()
     if update is None:
         return HttpResponseBadRequest("Nothing awaiting a decision on this task.")
+    linked = task.counts_toward_score
+    # The whole trail, not just the completion note: how the work went is the
+    # thing being graded, and it is spread across the progress updates.
+    ctx = {"task": task, "update": update, "trail": list(task.updates.all())}
     if request.method != "POST":
-        return render(request, "hub/task_decide.html", {"task": task, "update": update,
-                                                        "form": DecisionForm()})
+        return render(request, "hub/task_decide.html",
+                      dict(ctx, form=DecisionForm(kpi_linked=linked)))
     approve = request.POST.get("decision") == "approve"
-    form = DecisionForm(request.POST)
-    form.is_valid()
-    services.decide_update(update, request.user, approve, form.cleaned_data.get("note", ""))
+    form = DecisionForm(request.POST, kpi_linked=linked)
+    # A mark of 500 used to be dropped in silence; now the manager sees why.
+    if not form.is_valid():
+        return render(request, "hub/task_decide.html", dict(ctx, form=form))
+    services.decide_update(update, request.user, approve, form.cleaned_data.get("note", ""),
+                           grade=form.cleaned_data.get("grade"))
     messages.success(request, "Approved." if approve else "Sent back.")
     return redirect("tasks")
 
@@ -353,6 +450,66 @@ def _entry_context(employee, year, month):
             "quarter_end": scoring.is_quarter_end(month),
             "complete_months": [m for m in range(12)
                                 if services.month_summary(employee, year, m, kpis, assigned).complete]}
+
+
+def _year_grid_context(employee, year):
+    """Every KPI against every month, for one analyst.
+
+    The month view stays the place a month is closed; this is the same data
+    laid flat so a whole year can be typed in one pass.
+    """
+    kpis = services.year_kpis(year)
+    assigned = services.assigned_goal_ids(employee, year)
+    values = {m: services.month_values(employee, year, m, kpis) for m in range(12)}
+    frozen = {m for m in range(12) if month_is_scored(employee, year, m)}
+    summaries = services.year_summaries(employee, year)
+
+    groups = []
+    for goal in year.goals.prefetch_related("kpis", "assignees__user"):
+        # Every goal is listed, including ones this analyst is not on: a goal
+        # missing from the sheet with no explanation reads as a broken page.
+        applies = goal.pk in assigned
+        rows = []
+        for kpi in goal.kpis.all():
+            auto = kpi.scoring_mode == scoring.FROM_TASKS
+            cells = []
+            for m in range(12):
+                eligible = applies and scoring.eligible(kpi, m, assigned)
+                cells.append({
+                    "month": m,
+                    "eligible": eligible,
+                    # Task-derived marks are never typed: they come from approvals.
+                    "editable": eligible and not auto and m not in frozen and not year.closed,
+                    "frozen": m in frozen,
+                    "value": values[m].get(kpi.code),
+                })
+            rows.append({"kpi": kpi, "cells": cells, "auto": auto})
+        pct = services.goal_percent(employee, year, goal) if applies else None
+        groups.append({"goal": goal, "rows": rows, "percent": pct, "band": scoring.band(pct),
+                       "marks": goal.total_marks, "applies": applies,
+                       "assigned_to": ", ".join(sorted(e.name for e in goal.assignees.all()))})
+
+    annual = scoring.annual_percent(summaries)
+    return {
+        "employee": employee, "year": year, "groups": groups,
+        "months": list(enumerate(scoring.MONTHS)),
+        "month_cols": [{"index": m, "label": scoring.MONTHS[m],
+                        "quarter_end": scoring.is_quarter_end(m),
+                        "frozen": m in frozen, "summary": summaries[m],
+                        "band": scoring.band(summaries[m].percent)} for m in range(12)],
+        "annual": annual, "annual_band": scoring.band(annual),
+        "complete": len([s for s in summaries if s.complete]),
+        "applied": len([g for g in groups if g["applies"]]),
+    }
+
+
+@login_required
+def score_year(request, employee_id):
+    employee = get_object_or_404(Employee, pk=employee_id)
+    require(permissions.can_score(request.user, employee))
+    ctx = _year_grid_context(employee, _year(request))
+    ctx["screen"] = "team"
+    return render(request, "hub/score_year.html", ctx)
 
 
 @login_required
@@ -484,12 +641,32 @@ def my_tasks(request):
     if me is None:
         raise ValidationError("Your account is not linked to an employee record.")
     year = _year(request)
-    qs = Task.objects.filter(assignee=me, year=year).select_related("kpi__goal")
+    today = timezone.localdate()
+    qs = (Task.objects.filter(assignee=me, year=year)
+          .select_related("kpi__goal").prefetch_related("updates"))
+
+    def rows(queryset):
+        out = []
+        for task in queryset:
+            item = _task_context(task)
+            item["overdue"] = bool(task.due_date and task.due_date < today and not task.approved)
+            item["updates"] = len(task.updates.all())
+            out.append(item)
+        return out
+
+    open_tasks = rows(qs.exclude(status=Task.APPROVED))
+    # Soonest due first, undated last: what is late belongs at the top, not
+    # wherever the title happened to sort it.
+    open_tasks.sort(key=lambda i: (i["task"].due_date is None, i["task"].due_date or today))
+    done_tasks = rows(qs.filter(status=Task.APPROVED))
+    graded = [i["task"].grade for i in done_tasks if i["task"].grade is not None]
+
     return render(request, "hub/my_tasks.html", {
         "screen": "mytasks",
-        "open_tasks": [_task_context(t) for t in qs.exclude(status=Task.APPROVED)],
-        "done_tasks": [_task_context(t) for t in qs.filter(status=Task.APPROVED)],
-        "me": me,
+        "open_tasks": open_tasks, "done_tasks": done_tasks, "me": me, "year": year,
+        "waiting": len([i for i in open_tasks if i["task"].status == Task.SUBMITTED]),
+        "overdue": len([i for i in open_tasks if i["overdue"]]),
+        "average_grade": sum(graded) / len(graded) if graded else None,
     })
 
 

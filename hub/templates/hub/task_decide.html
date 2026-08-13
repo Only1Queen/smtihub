@@ -1,4 +1,4 @@
-{% extends "hub/base.html" %}
+{% extends "hub/base.html" %}{% load hub_extras %}
 {% block title %}Review task — SMTI HUB{% endblock %}
 {% block crumb %}<a href="{% url 'tasks' %}" style="color:var(--muted)">Tasks</a> / <b>Review</b>{% endblock %}
 {% block content %}
@@ -13,20 +13,20 @@
       {% if task.kpi %}<span class="link-tag">{{ task.kpi.code }} · {{ task.weight }}% of KPI</span>
       {% else %}<span class="link-none">operational · no marks</span>{% endif %}
     </div>
-    <div class="submission">
-      <div class="sub-who">{{ update.author.name }} · {{ update.submitted_at|date:"j M, H:i" }}</div>
-      <p>{{ update.note|default:"(no note)" }}</p>
-    </div>
+    {% for u in trail %}
+      <div class="submission" style="{% if u.pk != update.pk %}border-left-color:var(--border-2){% endif %}">
+        <div class="sub-who">{{ u.author.name }} · {{ u.submitted_at|date:"j M, H:i" }}
+          <span class="st {{ u.proposed_status|status_class }}" style="margin-left:6px;font-size:10px;padding:1px 7px">
+            {{ u.proposed_status|update_label }}</span></div>
+        <p>{{ u.note|default:"(no note)" }}</p>
+      </div>
+    {% endfor %}
   </div>
   <form method="post" class="form-body" style="padding-top:0">{% csrf_token %}
     {% include "hub/_form.html" %}
-    {% if task.kpi %}
-      <p class="dlg-note">Approving this moves {{ task.assignee.name }}'s {{ task.kpi.code }} mark
-        for {{ task.month_label }} immediately, and the change is logged.</p>
-    {% endif %}
     <div class="dlg-actions">
       <button class="btn" type="submit" name="decision" value="return">Send back</button>
-      <button class="btn primary" type="submit" name="decision" value="approve">Approve</button></div>
+      <button class="btn primary" type="submit" name="decision" value="approve">Mark completed</button></div>
   </form>
 </div>
 {% endblock %}

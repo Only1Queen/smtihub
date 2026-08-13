@@ -1,0 +1,91 @@
+{% extends "hub/base.html" %}{% load hub_extras %}
+{% block title %}{{ task.title }} — SMTI HUB{% endblock %}
+{% block crumb %}
+  {% if mine %}<a href="{% url 'my_tasks' %}" style="color:var(--muted)">My tasks</a>
+  {% else %}<a href="{% url 'tasks' %}" style="color:var(--muted)">Tasks</a>{% endif %}
+  / <b>{{ task.title }}</b>{% endblock %}
+{% block content %}
+<h1>{{ task.title }}</h1>
+<p class="sub">{{ task.assignee.name }} · {{ task.assignee.job_title }} ·
+  <span class="st {{ task.status|status_class }}">{{ task.get_status_display }}</span></p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-k">Due</div>
+    <div class="stat-v {% if overdue %}s-bad{% endif %}" style="font-size:17px;padding-top:9px">
+      {{ task.due_date|date:"j M Y"|default:"No due date" }}</div>
+    <div class="stat-n">{% if overdue %}overdue{% else %}counts in {{ task.month_label }}{% endif %}</div></div>
+  <div class="stat"><div class="stat-k">Counts toward</div>
+    <div class="stat-v" style="font-size:17px;padding-top:9px">
+      {% if task.kpi %}{{ task.kpi.code }}{% elif task.grade is not None %}{{ task.grade }}/100{% else %}—{% endif %}</div>
+    <div class="stat-n">{% if task.kpi %}{{ task.kpi.goal.code }} · weight {{ task.weight }}%
+      {% elif task.grade is not None %}marked by your manager{% else %}operational · no KPI{% endif %}</div></div>
+  <div class="stat"><div class="stat-k">Updates</div>
+    <div class="stat-v">{{ trail|length }}</div>
+    <div class="stat-n">{% if trail %}last {{ trail.0.submitted_at|date:"j M, H:i" }}{% else %}none yet{% endif %}</div></div>
+  <div class="stat"><div class="stat-k">{% if mine %}Move it along{% else %}Review{% endif %}</div>
+    <div class="stat-v" style="font-size:15px;padding-top:6px">
+      {% if mine and task.status != 'approved' %}
+        <a href="{% url 'task_submit' task.pk %}"><button class="btn primary">Change status</button></a>
+      {% elif can_decide and task.status == 'submitted' %}
+        <a href="{% url 'task_decide' task.pk %}"><button class="btn primary">Review &amp; grade</button></a>
+      {% else %}<span class="tag mono">nothing to do</span>{% endif %}</div>
+    <div class="stat-n">{% if task.status == 'submitted' %}sent for review{% else %}{{ task.get_status_display|lower }}{% endif %}</div></div>
+</div>
+
+<div class="cols">
+  <div class="card">
+    <div class="card-head"><span class="card-title">What was asked for</span>
+      <span class="card-note">set by {{ task.created_by.get_full_name|default:task.created_by.username }}</span></div>
+    <div class="detail-body">
+      {% if task.description %}<p>{{ task.description|linebreaksbr }}</p>
+      {% else %}<p class="muted">No description was given.</p>{% endif %}
+      <div class="task-meta">
+        <span>Scoring month <b>{{ task.month_label }}</b></span>
+        <span>Created <b>{{ task.created_at|date:"j M Y" }}</b></span>
+        {% if task.kpi %}<span class="link-tag">{{ task.kpi.code }} · {{ task.weight }}% of KPI</span>
+        {% else %}<span class="link-none">operational · no KPI</span>{% endif %}
+      </div>
+    </div>
+
+    {% if mine and task.status != 'approved' %}
+      <div class="card-head" style="border-top:1px solid var(--border)">
+        <span class="card-title">Daily update</span>
+        <span class="card-note">no status change — just what happened today</span></div>
+      <form method="post" class="detail-body">{% csrf_token %}
+        <textarea name="note" rows="3" required
+                  placeholder="What you did on this today."></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:10px">
+          <button class="btn primary" type="submit">Post today's update</button></div>
+      </form>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span class="card-title">Progress</span>
+      <span class="card-note">newest first</span></div>
+    <div class="detail-body">
+      {% for u in trail %}
+        <div class="trail-item">
+          <div class="trail-when">
+            <span class="mono">{{ u.submitted_at|date:"j M" }}</span>
+            <span class="mono" style="color:var(--faint)">{{ u.submitted_at|date:"H:i" }}</span></div>
+          <div class="trail-body">
+            <div class="sub-who">{{ u.author.name }} ·
+              <span class="st {{ u.proposed_status|status_class }}" style="font-size:10px;padding:1px 7px">
+                {{ u.proposed_status|update_label }}</span></div>
+            <p>{{ u.note|default:"(no note)"|linebreaksbr }}</p>
+            {% if u.decision == 'returned' and u.decision_note %}
+              <div class="verdict"><b>Sent back:</b> {{ u.decision_note }}</div>
+            {% elif u.decision == 'approved' %}
+              <div class="verdict ok"><b>Completed</b> by {{ u.decided_by.get_full_name|default:u.decided_by.username }}
+                {% if u.task.grade is not None %} · marked {{ u.task.grade }}/100{% endif %}</div>
+            {% endif %}
+          </div>
+        </div>
+      {% empty %}
+        <p class="muted">Nothing posted yet.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

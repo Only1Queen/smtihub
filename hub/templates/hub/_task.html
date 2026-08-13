@@ -1,42 +1,56 @@
 {% load hub_extras %}
+{% comment %}One card, two columns: everything variable on the left, status and
+the one action pinned to a fixed rail on the right, so cards line up down the
+list. Multi-line, so it must be a comment tag — {# #} is single-line only and
+the rest would print onto the page.{% endcomment %}
 <div class="task">
-  <div class="task-top">
-    <div style="flex:1;min-width:0">
-      <div class="task-title">{{ item.task.title }}</div>
+  <div class="task-row">
+    <div class="task-main">
+      <a href="{% url 'task_detail' item.task.pk %}" class="task-title">{{ item.task.title }}</a>
       {% if item.task.description %}<div class="task-desc">{{ item.task.description }}</div>{% endif %}
       <div class="task-meta">
         {% if not mine %}<span><b>{{ item.task.assignee.name }}</b></span>{% endif %}
-        <span>Due <b>{{ item.task.due_date|date:"j M Y"|default:"—" }}</b></span>
-        <span>{{ item.task.month_label }}</span>
+        <span>Counts in <b>{{ item.task.month_label }}</b></span>
+        {% if item.task.due_date %}
+          <span{% if item.overdue %} class="late"{% endif %}>Due
+            <b>{{ item.task.due_date|date:"j M Y" }}</b>{% if item.overdue %} · overdue{% endif %}</span>
+        {% else %}<span>No due date</span>{% endif %}
+        {% if item.updates %}<span>{{ item.updates }} update{{ item.updates|pluralize }}</span>{% endif %}
         {% if item.task.kpi %}
           <span class="link-tag">{{ item.task.kpi.code }} · {{ item.task.weight }}% of KPI</span>
+        {% elif item.task.grade is not None %}
+          <span class="link-tag">marked {{ item.task.grade }}/100</span>
         {% else %}
-          <span class="link-none">operational · no marks</span>
+          <span class="link-none">operational · no KPI</span>
         {% endif %}
       </div>
-    </div>
-    <span class="st {{ item.task.status|status_class }}">{{ item.task.get_status_display }}</span>
-  </div>
 
-  {% if item.latest %}
-    <div class="submission {% if item.latest.decision == 'returned' %}returned{% endif %}">
-      <div class="sub-who">{{ item.latest.author.name }} · {{ item.latest.submitted_at|date:"j M, H:i" }}</div>
-      <p>{{ item.latest.note|default:"(no note)" }}</p>
-      {% if item.latest.decision == 'returned' and item.latest.decision_note %}
-        <div class="verdict"><b>Sent back:</b> {{ item.latest.decision_note }}</div>
+      {% if item.latest %}
+        <div class="submission {% if item.latest.decision == 'returned' %}returned{% elif item.latest.decision == 'not_needed' %}progress{% endif %}">
+          <div class="sub-who">{{ item.latest.author.name }} ·
+            {{ item.latest.submitted_at|date:"j M, H:i" }} ·
+            {{ item.latest.proposed_status|update_label }}</div>
+          <p>{{ item.latest.note|default:"(no note)" }}</p>
+          {% if item.latest.decision == 'returned' and item.latest.decision_note %}
+            <div class="verdict"><b>Sent back:</b> {{ item.latest.decision_note }}</div>
+          {% endif %}
+        </div>
       {% endif %}
     </div>
-  {% endif %}
 
-  <div class="task-acts">
-    {% if mine %}
-      {% if item.task.status == 'submitted' %}
-        <span class="task-meta" style="margin:0">Waiting on your manager.</span>
-      {% elif item.task.status != 'approved' %}
-        <a href="{% url 'task_submit' item.task.pk %}"><button class="btn sm primary">Submit for approval</button></a>
+    <div class="task-rail">
+      <span class="st {{ item.task.status|status_class }}">{{ item.task.get_status_display }}</span>
+      {% if mine %}
+        {% if item.task.status == 'submitted' %}
+          <span class="rail-note">With your manager</span>
+        {% elif item.task.status != 'approved' %}
+          <a href="{% url 'task_submit' item.task.pk %}"><button class="btn sm primary">Update progress</button></a>
+        {% else %}
+          <span class="rail-note">Closed</span>
+        {% endif %}
+      {% elif item.task.status == 'submitted' %}
+        <a href="{% url 'task_decide' item.task.pk %}"><button class="btn sm primary">Review</button></a>
       {% endif %}
-    {% elif item.task.status == 'submitted' %}
-      <a href="{% url 'task_decide' item.task.pk %}"><button class="btn sm primary">Review</button></a>
-    {% endif %}
+    </div>
   </div>
 </div>

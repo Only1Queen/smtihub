@@ -1,7 +1,8 @@
 {% extends "hub/base.html" %}{% load hub_extras %}
 {% block title %}Score entry — SMTI HUB{% endblock %}
 {% block crumb %}<a href="{% url 'team' %}" style="color:var(--muted)">Team</a> /
-  <b>{{ employee.name }}</b> / {{ months|index:month|index:1 }}{% endblock %}
+  <a href="{% url 'score_year' employee.pk %}" style="color:var(--muted)">{{ employee.name }}</a> /
+  {{ months|index:month|index:1 }}{% endblock %}
 {% block content %}
 <h1>Score entry</h1>
 <p class="sub">{{ employee.name }} · {{ employee.job_title }}</p>
@@ -79,8 +80,4 @@
   {% include "hub/_saveline.html" %}
 </div>
 
-<p class="foot-note"><b>What this screen enforces:</b> a mark above a KPI's maximum is rejected
-server-side, quarterly KPIs cannot be scored outside their quarter, and each save carries the
-timestamp it loaded with — a second tab editing the same cell gets a conflict rather than
-silently overwriting. Every change writes an audit row.</p>
 {% endblock %}

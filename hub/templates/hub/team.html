@@ -30,7 +30,7 @@
     <tbody>
     {% for row in rows %}
       <tr class="{% if not row.employee.active %}inactive{% endif %}">
-        <td><a href="{% url 'score_entry' row.employee.pk row.current_month %}" style="text-decoration:none;color:inherit">
+        <td><a href="{% url 'score_year' row.employee.pk %}" style="text-decoration:none;color:inherit">
           <div class="who-cell"><div class="avatar">{{ row.employee.initials }}</div>
           <div><div style="font-weight:600">{{ row.employee.name }}
             {% if not row.employee.active %}<span class="tag" style="margin-left:6px">inactive</span>{% endif %}</div>
@@ -42,7 +42,9 @@
           <span class="mono" style="font-size:11.5px;color:var(--muted)">{{ row.complete }}/12</span></div></td>
         <td class="num mono" style="color:var(--muted)">{{ row.current.entered }}/{{ row.current.slots }}</td>
         <td><div class="row-actions">
-          <a href="{% url 'score_entry' row.employee.pk row.current_month %}"><button class="btn sm">Score</button></a>
+          <a href="{% url 'score_year' row.employee.pk %}"><button class="btn sm">Score year</button></a>
+          <a href="{% url 'score_entry' row.employee.pk row.current_month %}"><button class="btn sm">This month</button></a>
+          <a href="{% url 'employee_appraisal' row.employee.pk %}"><button class="btn sm">Their view</button></a>
           <a href="{% url 'employee_edit' row.employee.pk %}"><button class="btn sm">Edit</button></a>
           <a href="{% url 'employee_password' row.employee.pk %}"><button class="btn sm">Password</button></a>
           <form method="post" action="{% url 'employee_toggle' row.employee.pk %}" style="margin:0">{% csrf_token %}
@@ -58,8 +60,4 @@
   </table></div>
 </div>
 
-<p class="foot-note"><b>Analysts are deactivated, never deleted.</b> Someone who leaves keeps
-their scores and their place in the year's history — they simply stop being able to sign in
-and drop out of the team average. <b>Year to date</b> averages only months where every
-eligible KPI has a score.</p>
 {% endblock %}

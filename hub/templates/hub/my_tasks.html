@@ -1,13 +1,29 @@
-{% extends "hub/base.html" %}
+{% extends "hub/base.html" %}{% load hub_extras %}
 {% block title %}My tasks — SMTI HUB{% endblock %}
 {% block crumb %}<b>My tasks</b>{% endblock %}
 {% block content %}
 <h1>My tasks</h1>
-<p class="sub">{{ me.name }}</p>
+<p class="sub">{{ me.name }} · {{ me.job_title }} · {{ year.label }}</p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-k">Open</div>
+    <div class="stat-v">{{ open_tasks|length }}</div>
+    <div class="stat-n">still yours to move</div></div>
+  <div class="stat"><div class="stat-k">With your manager</div>
+    <div class="stat-v {% if waiting %}s-warn{% endif %}">{{ waiting }}</div>
+    <div class="stat-n">completed, awaiting review</div></div>
+  <div class="stat"><div class="stat-k">Overdue</div>
+    <div class="stat-v {% if overdue %}s-bad{% endif %}">{{ overdue }}</div>
+    <div class="stat-n">past their due date</div></div>
+  <div class="stat"><div class="stat-k">Approved</div>
+    <div class="stat-v s-good">{{ done_tasks|length }}</div>
+    <div class="stat-n">{% if average_grade %}average mark {{ average_grade|floatformat:0 }}/100{% else %}closed by your manager{% endif %}</div></div>
+</div>
+
 <div class="cols">
   <div class="card">
     <div class="card-head"><span class="card-title">Open</span>
-      <span class="card-note">{{ open_tasks|length }} to do</span></div>
+      <span class="card-note">soonest due first</span></div>
     {% for item in open_tasks %}{% include "hub/_task.html" with mine=1 %}{% empty %}
       <div style="padding:26px 18px;text-align:center;color:var(--faint);font-size:13px">All clear.</div>
     {% endfor %}
@@ -20,7 +36,18 @@
     {% endfor %}
   </div>
 </div>
-<p class="foot-note"><b>Submitting is a request, not a completion.</b> A task stays "awaiting
-approval" until your manager confirms it, and only then does it count toward a goal. If it comes
-back, the reason is shown on the task.</p>
+
+<div class="card" style="margin-top:18px">
+  <div class="card-head"><span class="card-title">How a task moves</span>
+    <span class="card-note">You set everything up to "sent for review"; your manager marks it completed</span></div>
+  <div class="ladder">
+    <span class="st st-idle">Not started</span><span class="ladder-arrow">→</span>
+    <span class="st st-pick">Task picked up</span><span class="ladder-arrow">→</span>
+    <span class="st st-prog">In progress</span><span class="ladder-arrow">→</span>
+    <span class="st st-near">On track</span><span class="ladder-arrow">→</span>
+    <span class="st st-wait">Sent for review</span><span class="ladder-arrow">→</span>
+    <span class="st st-done">Completed</span>
+    <span class="ladder-note">Sent back? The reason appears on the task and it returns to you.</span>
+  </div>
+</div>
 {% endblock %}
