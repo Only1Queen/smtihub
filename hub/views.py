@@ -1,3 +1,4 @@
+import csv
 import json
 from datetime import timedelta
 
@@ -37,6 +38,18 @@ def _selected_year(request):
     if year is None:
         raise ValidationError("No appraisal year exists. Create one in the admin.")
     return year
+
+
+def csv_response(name, header, rows):
+    """Every export on the site. The data is a team's year — small enough to
+    build in one response, so nothing here streams or paginates."""
+    response = HttpResponse(content_type="text/csv")
+    stamp = timezone.localdate().isoformat()
+    response["Content-Disposition"] = f'attachment; filename="{name}-{stamp}.csv"'
+    writer = csv.writer(response)
+    writer.writerow(header)
+    writer.writerows(rows)
+    return response
 
 
 def team_of(user):
@@ -87,6 +100,16 @@ def team(request):
     rows = [_row(e, year) for e in team_of(request.user)]
     active = [r for r in rows if r["employee"].active]
     done = [r["annual"] for r in active if r["annual"] is not None]
+    if request.GET.get("export") == "csv":
+        return csv_response(
+            f"smti-team-{year.label}",
+            ["Analyst", "Job title", "Active"] + scoring.MONTHS
+            + ["Year to date", "Band", "Months complete"],
+            ([r["employee"].name, r["employee"].job_title,
+              "yes" if r["employee"].active else "no"]
+             + ["" if s.percent is None else f"{s.percent:.1f}" for s in r["summaries"]]
+             + ["" if r["annual"] is None else f"{r['annual']:.1f}", r["band"], r["complete"]]
+             for r in rows))
     return render(request, "hub/team.html", {
         "screen": "team",
         "rows": rows,
@@ -166,6 +189,15 @@ def goals(request):
             "marks": goal.total_marks,
             "locked": goal.has_scores(),
         })
+    if request.GET.get("export") == "csv":
+        return csv_response(
+            f"smti-goals-{year.label}",
+            ["Goal", "Goal name", "KPI", "KPI text", "Max marks", "Quarterly",
+             "Scoring", "Assigned to"],
+            ([r["goal"].code, r["goal"].name, k.code, k.text, k.max_marks,
+              "yes" if k.quarterly else "no", k.get_scoring_mode_display(),
+              _assignment_label(r["goal"])]
+             for r in goal_rows for k in r["kpis"]))
     return render(request, "hub/goals.html", {
         "screen": "goals",
         "rows": goal_rows, "year": year,
@@ -261,6 +293,21 @@ def tasks(request):
                "open": len([i for i in items if not i["task"].approved])}
               for e, items in sorted(by_person.items(), key=lambda kv: kv[0].name)]
 
+    if request.GET.get("export") == "csv":
+        # The whole year, not the month on screen: a spreadsheet of one month is
+        # a screenshot, and the question asked of an export is always "so far".
+        return csv_response(
+            f"smti-tasks-{year.label}",
+            ["Task", "Analyst", "Status", "Scoring month", "Due", "KPI", "Goal",
+             "Weight %", "Grade", "Created", "Updates", "Last update"],
+            ([t.title, t.assignee.name, t.get_status_display(), t.month_label,
+              t.due_date or "", t.kpi.code if t.kpi else "",
+              t.kpi.goal.code if t.kpi else "", t.weight or "",
+              "" if t.grade is None else t.grade,
+              timezone.localtime(t.created_at).date(), len(t.updates.all()),
+              (timezone.localtime(t.updates.all()[0].submitted_at)
+               .strftime("%Y-%m-%d %H:%M") if t.updates.all() else "")]
+             for t in qs.prefetch_related("updates")))
     return render(request, "hub/tasks.html", {
         "screen": "tasks",
         "pending": pending, "people": people, "month": month,
@@ -392,8 +439,27 @@ def updates_dashboard(request):
     who = request.GET.get("who")
     if who:
         feed = feed.filter(author_id=who)
-    feed = list(feed[:80])
 
+    export = request.GET.get("export")
+    if export == "csv":
+        return csv_response(
+            "smti-update-coverage",
+            ["Analyst", "Date", "Weekday", "State"],
+            ([r["employee"].name, c["date"], c["date"].strftime("%A"),
+              "weekend" if c["weekend"] else "posted" if c["posted"]
+              else "no open task" if c["idle"] else "missed"]
+             for r in rows for c in r["cells"]))
+    if export == "notes":
+        return csv_response(
+            "smti-daily-updates",
+            ["Date", "Time", "Analyst", "Task", "Update"],
+            ([timezone.localtime(u.submitted_at).date(),
+              timezone.localtime(u.submitted_at).strftime("%H:%M"),
+              u.author.name, u.task.title, u.note]
+             for u in feed))
+
+    # The screen shows a readable page of them; the export is the lot.
+    feed = list(feed[:80])
     return render(request, "hub/updates_dashboard.html", {
         "screen": "updates", "rows": rows, "days": days, "feed": feed, "who": who,
         "people": people, "my_open": my_open, "me": me,
@@ -719,19 +785,12 @@ def year_summary(request):
 
 def _csv(rows, year):
     """Small enough to stream synchronously — five analysts by twelve months."""
-    import csv
-
-    response = HttpResponse(content_type="text/csv")
-    response["Content-Disposition"] = f'attachment; filename="smti-{year.label}.csv"'
-    writer = csv.writer(response)
-    writer.writerow(["Analyst"] + scoring.MONTHS + ["Year to date"])
-    for row in rows:
-        writer.writerow(
-            [row["employee"].name]
-            + [("" if c["percent"] is None else f"{c['percent']:.1f}") for c in row["cells"]]
-            + ["" if row["annual"] is None else f"{row['annual']:.1f}"]
-        )
-    return response
+    return csv_response(
+        f"smti-{year.label}", ["Analyst"] + scoring.MONTHS + ["Year to date"],
+        ([row["employee"].name]
+         + [("" if c["percent"] is None else f"{c['percent']:.1f}") for c in row["cells"]]
+         + ["" if row["annual"] is None else f"{row['annual']:.1f}"]
+         for row in rows))
 
 
 @login_required
@@ -764,19 +823,16 @@ def activity(request):
 def _audit_csv(events):
     """The whole filtered set, not the page — an auditor asking for "everything
     on this account" should not have to click through pages to get it."""
-    import csv
+    def rows():
+        for e in events.iterator(chunk_size=500):
+            detail = {k: v for k, v in e.detail.items() if k not in {"before", "after"}}
+            yield [e.timestamp.isoformat(timespec="seconds"), e.actor_label, e.action,
+                   e.target, e.detail.get("before", ""), e.detail.get("after", ""),
+                   json.dumps(detail, default=str) if detail else ""]
 
-    response = HttpResponse(content_type="text/csv")
-    stamp = timezone.now().strftime("%Y%m%d")
-    response["Content-Disposition"] = f'attachment; filename="smti-activity-{stamp}.csv"'
-    writer = csv.writer(response)
-    writer.writerow(["Timestamp", "Actor", "Action", "Target", "Before", "After", "Detail"])
-    for e in events.iterator(chunk_size=500):
-        detail = {k: v for k, v in e.detail.items() if k not in {"before", "after"}}
-        writer.writerow([e.timestamp.isoformat(timespec="seconds"), e.actor_label, e.action,
-                         e.target, e.detail.get("before", ""), e.detail.get("after", ""),
-                         json.dumps(detail, default=str) if detail else ""])
-    return response
+    return csv_response("smti-activity",
+                        ["Timestamp", "Actor", "Action", "Target", "Before", "After", "Detail"],
+                        rows())
 
 
 @login_required

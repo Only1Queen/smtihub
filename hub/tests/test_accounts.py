@@ -217,3 +217,42 @@ class ActivityExportTests(TestCase):
         self.client.force_login(f.make_employee("bello", "A Bello").user)
         response = self.client.get(reverse("activity"), {"export": "csv"})
         self.assertEqual(response.status_code, 403)
+
+
+class ManagerExportTests(TestCase):
+    """Every screen a manager reads should leave the building as a spreadsheet."""
+
+    def setUp(self):
+        self.boss = f.make_employee("manager", "SMTI Manager", is_manager=True)
+        self.a = f.make_employee("bello", "A Bello", manager=self.boss)
+        f.assign_all(self.a)
+        self.task = f.make_task(self.a, self.boss.user, title="Ruleset review")
+        services.daily_update(self.task, self.a, "Tuned two rules")
+        self.client.force_login(self.boss.user)
+
+    def csv(self, name, **params):
+        response = self.client.get(reverse(name), dict(params, export=params.pop("export", "csv")))
+        self.assertEqual(response["Content-Type"], "text/csv")
+        return response.content.decode()
+
+    def test_the_team_export_carries_every_analyst(self):
+        self.assertIn("A Bello", self.csv("team"))
+
+    def test_the_goals_export_carries_the_kpis(self):
+        self.assertIn("B1", self.csv("goals"))
+
+    def test_the_tasks_export_covers_the_year_not_the_month_on_screen(self):
+        self.task.scoring_month = (self.task.scoring_month + 1) % 12
+        self.task.save(update_fields=["scoring_month"])
+        self.assertIn("Ruleset review", self.csv("tasks"))
+
+    def test_the_update_exports_carry_coverage_and_the_notes(self):
+        self.assertIn("A Bello", self.csv("updates_dashboard"))
+        self.assertIn("Tuned two rules", self.csv("updates_dashboard", export="notes"))
+
+    def test_an_analyst_cannot_export_the_team(self):
+        """The team URL sends an analyst to their own record, CSV or not."""
+        self.client.force_login(self.a.user)
+        response = self.client.get(reverse("team"), {"export": "csv"})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.client.get(reverse("goals"), {"export": "csv"}).status_code, 403)

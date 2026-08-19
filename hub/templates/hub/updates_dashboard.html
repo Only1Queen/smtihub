@@ -25,7 +25,9 @@
 
 <div class="card">
   <div class="card-head"><span class="card-title">Coverage</span>
-    <span class="card-note">weekends are not counted as missed</span></div>
+    <span class="card-note">weekends are not counted as missed</span>
+    <div class="spacer" style="flex:1"></div>
+    <a href="?export=csv"><button class="btn sm">Export CSV</button></a></div>
   <div class="tw">
     <table class="update-grid">
       <thead><tr>
@@ -71,7 +73,9 @@
 
 <div class="card">
   <div class="card-head"><span class="card-title">Updates posted</span>
-    <span class="card-note">newest first · last {{ feed|length }} shown</span></div>
+    <span class="card-note">newest first · last {{ feed|length }} shown</span>
+    <div class="spacer" style="flex:1"></div>
+    <a href="?export=notes{% if who %}&amp;who={{ who }}{% endif %}"><button class="btn sm">Export CSV</button></a></div>
   {% if people|length > 1 %}
     <div class="detail-body" style="padding-bottom:0">
       <a href="{% url 'updates_dashboard' %}"><span class="tag mono">{% if not who %}▸ {% endif %}Everyone</span></a>

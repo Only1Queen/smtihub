@@ -57,8 +57,6 @@
                 title="Time left in {{ open_year.label }}">…</span>
           {% if open_year.closed %}
             <span class="pill closed mono"><svg class="ic-xs" aria-hidden="true"><use href="#i-lock"></use></svg>Closed</span>
-          {% else %}
-            <span class="pill open mono">Open</span>
           {% endif %}
         {% endif %}
         <form method="post" action="{% url 'logout' %}" style="margin:0">{% csrf_token %}

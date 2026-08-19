@@ -33,7 +33,8 @@
     <div class="spacer" style="flex:1"></div>
     <form method="get" style="margin:0"><select name="month" onchange="this.form.submit()">
       {% for i, label in months %}<option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ label }}</option>{% endfor %}
-    </select></form></div>
+    </select></form>
+    <a href="?export=csv"><button class="btn sm">Export CSV</button></a></div>
 
   {% for person in people %}
     <div class="tw"><table>
