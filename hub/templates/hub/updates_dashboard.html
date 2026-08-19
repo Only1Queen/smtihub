@@ -6,6 +6,23 @@
 <p class="sub">Last {{ day_count }} days · {{ start|date:"j M" }} to {{ today|date:"j M Y" }}.
   A day counts as covered if anything was posted on any task that day.</p>
 
+{% if my_open %}
+<div class="card">
+  <div class="card-head"><span class="card-title">Post today's update</span>
+    <span class="card-note">against a task assigned to you — goals are not updated here</span></div>
+  <form method="post" class="detail-body">{% csrf_token %}
+    <select name="task" required style="margin-bottom:10px">
+      {% for t in my_open %}
+        <option value="{{ t.pk }}">{{ t.title }}{% if t.due_date %} · due {{ t.due_date|date:"j M" }}{% endif %}</option>
+      {% endfor %}
+    </select>
+    <textarea name="note" rows="3" required placeholder="What you did on this today."></textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px">
+      <button class="btn primary" type="submit">Post update</button></div>
+  </form>
+</div>
+{% endif %}
+
 <div class="card">
   <div class="card-head"><span class="card-title">Coverage</span>
     <span class="card-note">weekends are not counted as missed</span></div>
@@ -49,6 +66,35 @@
     <span><span class="day idle"></span> nothing assigned</span>
     <span><span class="day wknd"></span> weekend</span>
     <span><span class="day yes now"></span> today</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><span class="card-title">Updates posted</span>
+    <span class="card-note">newest first · last {{ feed|length }} shown</span></div>
+  {% if people|length > 1 %}
+    <div class="detail-body" style="padding-bottom:0">
+      <a href="{% url 'updates_dashboard' %}"><span class="tag mono">{% if not who %}▸ {% endif %}Everyone</span></a>
+      {% for p in people %}
+        <a href="?who={{ p.pk }}"><span class="tag mono">{% if who == p.pk|stringformat:"s" %}▸ {% endif %}{{ p.name }}</span></a>
+      {% endfor %}
+    </div>
+  {% endif %}
+  <div class="detail-body">
+    {% for u in feed %}
+      <div class="trail-item">
+        <div class="trail-when">
+          <span class="mono">{{ u.submitted_at|date:"j M" }}</span>
+          <span class="mono" style="color:var(--faint)">{{ u.submitted_at|date:"H:i" }}</span></div>
+        <div class="trail-body">
+          <div class="sub-who">{{ u.author.name }} ·
+            <a href="{% url 'task_detail' u.task.pk %}">{{ u.task.title }}</a></div>
+          <p>{{ u.note|linebreaksbr }}</p>
+        </div>
+      </div>
+    {% empty %}
+      <p class="muted">No daily updates yet.</p>
+    {% endfor %}
   </div>
 </div>
 {% endblock %}
