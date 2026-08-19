@@ -336,13 +336,31 @@ DASHBOARD_DAYS = 28
 
 @login_required
 def updates_dashboard(request):
-    """Who posted an update on which day. Managers see the team, analysts see
-    themselves. Weekends are marked, not counted as missed."""
+    """Who posted an update on which day, what they said, and the box an analyst
+    drops today's update into. Managers see the team, analysts see themselves.
+    Weekends are marked, not counted as missed."""
     me = permissions.employee_of(request.user)
     people = list(team_of(request.user).filter(active=True)) if permissions.is_manager(request.user) \
         else ([me] if me else [])
     if me and permissions.is_manager(request.user) and me not in people:
         people = [me] + people
+
+    # Only tasks assigned to me, still open: goals are not updated here, and a
+    # completed task has nothing left to report.
+    my_open = list(Task.objects.filter(assignee=me).exclude(status=Task.APPROVED)
+                   .select_related("kpi__goal")) if me else []
+
+    if request.method == "POST":
+        task = get_object_or_404(Task, pk=request.POST.get("task"))
+        require(permissions.can_submit_update(request.user, task),
+                "You can only post updates on your own open tasks.")
+        try:
+            services.daily_update(task, me, request.POST.get("note", ""))
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, "Daily update posted.")
+        return redirect("updates_dashboard")
 
     today = timezone.localdate()
     start = today - timedelta(days=DASHBOARD_DAYS - 1)
@@ -369,8 +387,16 @@ def updates_dashboard(request):
             "expected": len([c for c in cells if c["expected"]]),
         })
 
+    feed = (TaskUpdate.objects.filter(author__in=people, decision=TaskUpdate.NOT_NEEDED)
+            .select_related("task", "author__user"))
+    who = request.GET.get("who")
+    if who:
+        feed = feed.filter(author_id=who)
+    feed = list(feed[:80])
+
     return render(request, "hub/updates_dashboard.html", {
-        "screen": "updates", "rows": rows, "days": days,
+        "screen": "updates", "rows": rows, "days": days, "feed": feed, "who": who,
+        "people": people, "my_open": my_open, "me": me,
         "start": start, "today": today, "day_count": DASHBOARD_DAYS,
     })
 

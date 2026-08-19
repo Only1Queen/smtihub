@@ -215,6 +215,27 @@ class UpdatesDashboardTests(TestCase):
         self.assertContains(response, "A Bello")
         self.assertNotContains(response, "I Jimoh")
 
+    def test_the_analyst_posts_an_update_from_the_dashboard(self):
+        self.client.force_login(self.a.user)
+        self.client.post(reverse("updates_dashboard"),
+                         {"task": self.task.pk, "note": "Ran the ruleset"})
+        self.assertIn(timezone.localdate(),
+                      services.update_days(self.a, timezone.localdate(), timezone.localdate()))
+
+    def test_an_analyst_cannot_post_against_somebody_elses_task(self):
+        other = f.make_employee("jimoh", "I Jimoh", manager=self.boss)
+        theirs = f.make_task(other, self.boss.user, title="Not yours")
+        self.client.force_login(self.a.user)
+        response = self.client.post(reverse("updates_dashboard"),
+                                    {"task": theirs.pk, "note": "nope"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_the_manager_reads_the_update_text(self):
+        services.daily_update(self.task, self.a, "Ran the ruleset")
+        self.client.force_login(self.boss.user)
+        response = self.client.get(reverse("updates_dashboard"))
+        self.assertContains(response, "Ran the ruleset")
+
     def test_the_manager_sees_the_whole_team(self):
         f.make_employee("jimoh", "I Jimoh", manager=self.boss)
         self.client.force_login(self.boss.user)
