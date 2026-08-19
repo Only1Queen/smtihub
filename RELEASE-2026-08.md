@@ -84,32 +84,21 @@ git fetch origin
 git checkout feature/task-tracking-and-year-scoring
 ```
 
-## 3. Build
+## 3. Deploy
 
 ```bash
-docker compose build
+docker compose up -d --build
 ```
 
-This rebuilds **every** service that has `build: .` — `web` and `admin`. Do
-not build only `web`: the `admin` container is what runs the migrations, and a
-stale `admin` image will report "No migrations to apply" and leave the
-database on the old schema while the new code is already serving.
+Compose runs the whole chain and stops at the first failure: `roles`, then
+`migrate`, then `grants` (which re-applies `grants.sql` and fails the deploy if
+the audit table came back rewritable), then `web` and `proxy`.
 
-## 4. Check the settings the new code will run under
+Expect all five migrations to apply:
 
 ```bash
-docker compose run --rm admin python manage.py check --deploy
+docker compose logs migrate
 ```
-
-Expected: `System check identified no issues (0 silenced).`
-
-## 5. Migrate
-
-```bash
-docker compose run --rm admin python manage.py migrate
-```
-
-Expect all five to apply:
 
 ```
   Applying hub.0004_task_grade... OK
@@ -119,46 +108,17 @@ Expect all five to apply:
   Applying hub.0008_daily_update_blank_status... OK
 ```
 
-If it says **"No migrations to apply"**, the `admin` image is stale. Go back
-to step 3 and build again. Confirm what the database actually has:
+What they do: `0004` adds a grade to a task, `0005` and `0006` widen the status
+lists, `0007` renames the status `near_done` to `on_track` **and rewrites
+existing rows** (reversible), `0008` lets a daily update carry no status at all.
+None of them drop anything.
+
+## 4. Verify — do not skip this
 
 ```bash
-OWNER=$(grep -m1 '^POSTGRES_OWNER=' .env | cut -d= -f2-)
-DB=$(grep -m1 '^POSTGRES_DB=' .env | cut -d= -f2-)
-docker compose exec -T db psql -U "$OWNER" -d "$DB" \
-  -c "select name from django_migrations where app='hub' order by id;"
+docker compose logs grants             # ends in audit_append_only_ok = t
+docker compose run --rm admin python manage.py check --deploy
 ```
-
-`0008_daily_update_blank_status` must be the last row before you go on.
-
-What the migrations do: `0004` adds a grade to a task, `0005` and `0006` widen
-the status lists, `0007` renames the status `near_done` to `on_track` **and
-rewrites existing rows** (reversible), `0008` lets a daily update carry no
-status at all. None of them drop anything.
-
-## 6. Re-apply the grants
-
-```bash
-docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/grants.sql
-```
-
-Every migrate, without exception. A migration that creates a table grants
-privileges on it afresh, so a new table would otherwise arrive unprotected.
-
-## 7. Start the new code
-
-```bash
-docker compose up -d web proxy
-```
-
-## 8. Verify — do not skip this
-
-```bash
-docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/verify_grants.sql
-```
-
-`audit_append_only_ok = t`. If it is `f`, step 6 did not run — run it and
-check again.
 
 ```bash
 docker compose ps                      # web healthy
@@ -178,7 +138,7 @@ Then sign in and walk these five, which is every new surface:
 5. **Daily updates** in the sidebar → today's square is green for whoever
    posted.
 
-## 9. Tell the team
+## 5. Tell the team
 
 Two things they will notice immediately, and one they will not:
 
@@ -201,8 +161,7 @@ first, then the one migration:
 git checkout master                     # or the previous tag
 docker compose build
 docker compose run --rm admin python manage.py migrate hub 0006
-docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/grants.sql
-docker compose up -d web proxy
+docker compose up -d --build
 ```
 
 `migrate hub 0006` reverses `0007` and `0008`, putting `on_track` back to

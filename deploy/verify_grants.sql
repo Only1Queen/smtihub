@@ -23,3 +23,17 @@ SELECT
     AND has_table_privilege('smti_web', 'hub_auditevent', 'INSERT')
     AND has_table_privilege('smti_web', 'hub_auditevent', 'SELECT')
     AS audit_append_only_ok;
+
+-- Same check again, as a hard failure: the deploy chain in docker-compose.yml
+-- runs this file and must stop when the answer is false.
+DO $$
+BEGIN
+    IF NOT (NOT has_table_privilege('smti_web', 'hub_auditevent', 'UPDATE')
+            AND NOT has_table_privilege('smti_web', 'hub_auditevent', 'DELETE')
+            AND NOT has_table_privilege('smti_web', 'hub_auditevent', 'TRUNCATE')
+            AND has_table_privilege('smti_web', 'hub_auditevent', 'INSERT')
+            AND has_table_privilege('smti_web', 'hub_auditevent', 'SELECT')) THEN
+        RAISE EXCEPTION 'audit table is not append-only: grants.sql has not been applied since the last migrate';
+    END IF;
+END
+$$;
