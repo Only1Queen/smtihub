@@ -53,8 +53,10 @@ drops in-flight requests, and a browser retry is all it takes.
 
 ## 1. Back up, and prove the backup exists
 
+`./deploy.sh` in step 3 does this for you. To take one now anyway:
+
 ```bash
-BACKUP_PASSPHRASE=<yours> ./deploy/backup.sh
+./deploy/backup.sh
 ls -lh backups/ | tail -3
 ```
 
@@ -87,10 +89,11 @@ git checkout feature/task-tracking-and-year-scoring
 ## 3. Deploy
 
 ```bash
-docker compose up -d --build
+./deploy.sh
 ```
 
-Compose runs the whole chain and stops at the first failure: `roles`, then
+It backs up first (see step 1 — this is now automatic), then Compose runs the
+whole chain and stops at the first failure: `roles`, then
 `migrate`, then `grants` (which re-applies `grants.sql` and fails the deploy if
 the audit table came back rewritable), then `web` and `proxy`.
 
@@ -161,7 +164,7 @@ first, then the one migration:
 git checkout master                     # or the previous tag
 docker compose build
 docker compose run --rm admin python manage.py migrate hub 0006
-docker compose up -d --build
+./deploy.sh
 ```
 
 `migrate hub 0006` reverses `0007` and `0008`, putting `on_track` back to
@@ -171,7 +174,7 @@ does not show them.
 **Roll everything back**, if the database itself is wrong:
 
 ```bash
-BACKUP_PASSPHRASE=<yours> ./deploy/restore.sh backups/smti-<the-one-from-step-1>.sql.gz.gpg
+./deploy/restore.sh backups/smti-<the-one-from-step-1>.sql.gz.gpg
 ```
 
 That discards anything entered since step 1. Which is why step 1 comes first.

@@ -7,7 +7,17 @@
 # host — a backup you cannot decrypt after losing the host is not a backup).
 set -eu
 
-: "${BACKUP_PASSPHRASE:?set BACKUP_PASSPHRASE}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+# Settings come from .env unless the environment already has them, so cron and
+# a half-awake operator both work without exporting anything by hand.
+dotenv() { grep -m1 "^$1=" "$ROOT/.env" 2>/dev/null | cut -d= -f2-; }
+BACKUP_PASSPHRASE="${BACKUP_PASSPHRASE:-$(dotenv BACKUP_PASSPHRASE)}"
+POSTGRES_DB="${POSTGRES_DB:-$(dotenv POSTGRES_DB)}"
+POSTGRES_OWNER="${POSTGRES_OWNER:-$(dotenv POSTGRES_OWNER)}"
+
+: "${BACKUP_PASSPHRASE:?set BACKUP_PASSPHRASE in .env}"
 KEEP="${BACKUP_KEEP_DAYS:-30}"
 STAMP=$(date +%Y-%m-%d-%H%M)
 OUT="backups/smti-${STAMP}.sql.gz.gpg"

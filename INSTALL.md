@@ -197,12 +197,16 @@ Replace `smti-hub.internal` with your real hostname in both places.
 
 ```bash
 cd /opt/smti-hub
-docker compose up -d --build
+./deploy.sh
 ```
 
-That is the whole install. The build takes a few minutes the first time. Compose
-then works through the steps in order and stops at the first one that fails:
+That is the whole install. The build takes a few minutes the first time. It
+works through the steps in order and stops at the first one that fails:
 
+0. **backup** — an encrypted copy of the database before anything changes.
+   There is nothing to copy on a first install, so it says so and carries on.
+   It also generates the backup passphrase into `.env` and prints it at the
+   end — **write that down and keep it off this server.**
 1. **db** — starts PostgreSQL and waits until it is accepting connections.
 2. **roles** — creates the restricted database user the app signs in as, with
    the password from your `.env`.
@@ -417,10 +421,11 @@ usual.)
 ## Backups — set this up on day one
 
 ```bash
-BACKUP_PASSPHRASE=<yours> ./deploy/backup.sh
+./deploy/backup.sh
 ```
 
-Writes an encrypted copy into `backups/`. To run it nightly, plus the month-end
+Writes an encrypted copy into `backups/`, using the passphrase `./deploy.sh`
+put in `.env`. A deploy takes one automatically. To run it nightly, plus the month-end
 reminders and (if you use AD) the leaver sync:
 
 ```bash
@@ -434,7 +439,7 @@ protects only survives software failure, not the loss of the server.
 Rehearse a restore once a quarter — an untested backup is a guess:
 
 ```bash
-BACKUP_PASSPHRASE=<yours> ./deploy/restore.sh backups/smti-2026-10-14-0200.sql.gz.gpg
+./deploy/restore.sh backups/smti-2026-10-14-0200.sql.gz.gpg
 ```
 
 It restores into a *separate* database so it cannot damage the live one.
@@ -443,13 +448,12 @@ It restores into a *separate* database so it cannot damage the live one.
 
 ```bash
 cd /opt/smti-hub
-BACKUP_PASSPHRASE=<yours> ./deploy/backup.sh     # always first
 git pull
-docker compose up -d --build
+./deploy.sh
 ```
 
-Same steps as the install: the new tables are created, the activity log is
-re-locked and checked, and the new code only starts if all of that worked.
+Same steps as the install: it backs up first, creates the new tables, re-locks
+and checks the activity log, and only then starts the new code.
 
 ## Starting the next appraisal year
 

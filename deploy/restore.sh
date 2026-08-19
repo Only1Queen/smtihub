@@ -6,7 +6,16 @@
 # backup is a guess.
 set -eu
 
-: "${BACKUP_PASSPHRASE:?set BACKUP_PASSPHRASE}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Settings come from .env unless the environment already has them, so cron and
+# a half-awake operator both work without exporting anything by hand.
+dotenv() { grep -m1 "^$1=" "$ROOT/.env" 2>/dev/null | cut -d= -f2-; }
+BACKUP_PASSPHRASE="${BACKUP_PASSPHRASE:-$(dotenv BACKUP_PASSPHRASE)}"
+POSTGRES_DB="${POSTGRES_DB:-$(dotenv POSTGRES_DB)}"
+POSTGRES_OWNER="${POSTGRES_OWNER:-$(dotenv POSTGRES_OWNER)}"
+
+: "${BACKUP_PASSPHRASE:?set BACKUP_PASSPHRASE in .env}"
 FILE="${1:?usage: restore.sh <backup file>}"
 DB="${POSTGRES_DB:-smti}"
 OWNER="${POSTGRES_OWNER:-smti_owner}"
@@ -15,17 +24,17 @@ printf 'This will REPLACE the contents of "%s". Type the database name to contin
 read -r confirm
 [ "$confirm" = "$DB" ] || { echo "aborted"; exit 1; }
 
-docker compose stop web
+docker compose -f "$ROOT/docker-compose.yml" stop web
 
 gpg --batch --quiet --decrypt --passphrase "$BACKUP_PASSPHRASE" "$FILE" \
   | gunzip \
-  | docker compose exec -T db psql -U "$OWNER" -d postgres \
+  | docker compose -f "$ROOT/docker-compose.yml" exec -T db psql -U "$OWNER" -d postgres \
       -c "DROP DATABASE IF EXISTS ${DB}_restore;" \
       -c "CREATE DATABASE ${DB}_restore OWNER $OWNER;" >/dev/null
 
 gpg --batch --quiet --decrypt --passphrase "$BACKUP_PASSPHRASE" "$FILE" \
   | gunzip \
-  | docker compose exec -T db psql -U "$OWNER" -d "${DB}_restore" >/dev/null
+  | docker compose -f "$ROOT/docker-compose.yml" exec -T db psql -U "$OWNER" -d "${DB}_restore" >/dev/null
 
 echo "Restored into ${DB}_restore. Verify it, then swap:"
 echo "  docker compose exec db psql -U $OWNER -d postgres \\"

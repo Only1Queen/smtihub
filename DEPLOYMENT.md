@@ -120,12 +120,16 @@ habit is what phishing relies on.
 
 ```bash
 cd /opt/smti-hub
-docker compose up -d --build
+./deploy.sh
 ```
 
-That is the whole deployment. Compose runs the chain in order and stops at the
-first failure:
+That is the whole deployment. It backs up first, then Compose runs the chain in
+order and stops at the first failure:
 
+0. `deploy.sh` — encrypted backup of the current database (skipped on a first
+   install, when there is nothing to back up). On the very first run it also
+   generates `BACKUP_PASSPHRASE` into `.env` and prints it once — **save that
+   off this host**, it is the only thing that can decrypt the backups.
 1. `db` — PostgreSQL, waited on until healthy.
 2. `roles` — creates the restricted `smti_web` role and sets its password from
    `.env` (`deploy/bootstrap_roles.sql`, safe to re-run).
@@ -280,12 +284,12 @@ deactivated for a reason of the hub's own.
 
 ```bash
 cd /opt/smti-hub
-BACKUP_PASSPHRASE=<yours> ./deploy/backup.sh        # always back up first
-git pull                                            # or copy the new code in
-docker compose up -d --build
+git pull                # or copy the new code in
+./deploy.sh
 ```
 
-Same chain as the first deployment: roles, migrate, grants + verify, then web.
+Same chain as the first deployment: backup, roles, migrate, grants + verify,
+then web.
 `grants.sql` is re-run on every deploy by design — a migration that creates a
 table grants privileges on it afresh, so a new table would otherwise arrive
 unprotected, and `verify_grants.sql` fails the deploy if it did.
@@ -293,17 +297,13 @@ unprotected, and `verify_grants.sql` fails the deploy if it did.
 ### Backups
 
 ```bash
-BACKUP_PASSPHRASE=<yours> ./deploy/backup.sh
+./deploy/backup.sh
 ```
 
-Writes `backups/smti-YYYY-MM-DD-HHMM.sql.gz.gpg`, AES256-encrypted, and prunes
-anything older than 30 days (`BACKUP_KEEP_DAYS` to change).
-
-Nightly, via the deploying user's crontab:
-
-```cron
-15 2 * * * cd /opt/smti-hub && BACKUP_PASSPHRASE=<yours> ./deploy/backup.sh >> /var/log/smti-backup.log 2>&1
-```
+Writes `backups/smti-YYYY-MM-DD-HHMM.sql.gz.gpg`, AES256-encrypted with
+`BACKUP_PASSPHRASE` from `.env`, and prunes anything older than 30 days
+(`BACKUP_KEEP_DAYS` to change). `./deploy.sh` runs it before every deploy;
+`deploy/smti-hub.cron` runs it nightly.
 
 Copy `backups/` to a different machine. A backup on the host it protects is
 only a defence against software failure, not against losing the host.
@@ -311,7 +311,7 @@ only a defence against software failure, not against losing the host.
 ### Restoring
 
 ```bash
-BACKUP_PASSPHRASE=<yours> ./deploy/restore.sh backups/smti-2026-10-14-0200.sql.gz.gpg
+./deploy/restore.sh backups/smti-2026-10-14-0200.sql.gz.gpg
 ```
 
 Restores into `smti_restore` rather than over the live database, and prints the
