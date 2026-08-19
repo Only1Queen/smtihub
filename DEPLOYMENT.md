@@ -120,36 +120,28 @@ habit is what phishing relies on.
 
 ```bash
 cd /opt/smti-hub
-
-# Read the three database settings out of .env. Do not `. ./.env`: values like
-# DJANGO_ADMINS contain spaces and <>, which Compose accepts and bash does not.
-OWNER=$(grep -m1 '^POSTGRES_OWNER=' .env | cut -d= -f2-)
-DB=$(grep -m1 '^POSTGRES_DB=' .env | cut -d= -f2-)
-WEB_PW=$(grep -m1 '^POSTGRES_WEB_PASSWORD=' .env | cut -d= -f2-)
-
-# 1. Build images and start PostgreSQL
-docker compose build
-docker compose up -d db
-docker compose exec db pg_isready -U "$OWNER" -d "$DB"
-
-# 2. Create the restricted application role
-docker compose exec -T db psql -U "$OWNER" -d "$DB" \
-  -v web_password="'$WEB_PW'" -f /deploy/bootstrap_roles.sql
-
-# 3. Run migrations as the owner (creates tables, seeds FY 2026-27)
-docker compose run --rm admin python manage.py migrate
-
-# 4. Lock down the audit table
-docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/grants.sql
-
-# 5. Prove it worked — must print audit_append_only_ok = t
-docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/verify_grants.sql
-
-# 6. Start the application and proxy
-docker compose up -d web proxy
+docker compose up -d --build
 ```
 
-If step 5 does not print `t`, stop and fix it before anyone signs in.
+That is the whole deployment. Compose runs the chain in order and stops at the
+first failure:
+
+1. `db` — PostgreSQL, waited on until healthy.
+2. `roles` — creates the restricted `smti_web` role and sets its password from
+   `.env` (`deploy/bootstrap_roles.sql`, safe to re-run).
+3. `migrate` — `manage.py migrate` as the owner role.
+4. `grants` — `deploy/grants.sql`, then `deploy/verify_grants.sql`, which raises
+   if the audit table came back rewritable.
+5. `web` and `proxy` — started only if every step above exited 0.
+
+Check it landed:
+
+```bash
+docker compose ps                 # web and proxy up, migrate/grants exited 0
+docker compose logs grants        # must show audit_append_only_ok = t
+```
+
+If `grants` did not exit 0, `web` never started. Fix it before anyone signs in.
 
 ### Create the manager account
 
@@ -288,21 +280,15 @@ deactivated for a reason of the hub's own.
 
 ```bash
 cd /opt/smti-hub
-OWNER=$(grep -m1 '^POSTGRES_OWNER=' .env | cut -d= -f2-)
-DB=$(grep -m1 '^POSTGRES_DB=' .env | cut -d= -f2-)
-
 BACKUP_PASSPHRASE=<yours> ./deploy/backup.sh        # always back up first
 git pull                                            # or copy the new code in
-docker compose build
-docker compose run --rm admin python manage.py migrate
-docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/grants.sql
-docker compose up -d web proxy
-docker compose exec -T db psql -U "$OWNER" -d "$DB" -f /deploy/verify_grants.sql
+docker compose up -d --build
 ```
 
-**Re-run `grants.sql` after every migrate.** A migration that creates a table
-grants privileges on it afresh, so a new table would otherwise arrive
-unprotected. The `verify_grants.sql` step at the end is how you find out.
+Same chain as the first deployment: roles, migrate, grants + verify, then web.
+`grants.sql` is re-run on every deploy by design — a migration that creates a
+table grants privileges on it afresh, so a new table would otherwise arrive
+unprotected, and `verify_grants.sql` fails the deploy if it did.
 
 ### Backups
 

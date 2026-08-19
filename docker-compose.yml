@@ -18,6 +18,52 @@ services:
     restart: unless-stopped
     # Not published to the host: only the web service needs to reach it.
 
+  # One-shot deploy chain: roles -> migrate -> grants+verify -> web.
+  # `docker compose up -d --build` runs all of it in order; web does not start
+  # unless every step exited 0. See DEPLOYMENT.md.
+  roles:
+    image: postgres:16-alpine
+    env_file: .env
+    environment:
+      PGPASSWORD: ${POSTGRES_OWNER_PASSWORD}
+    volumes:
+      - ./deploy:/deploy:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    command:
+      - psql -h db -U "$$POSTGRES_OWNER" -d "$$POSTGRES_DB"
+        -v web_password="'$$POSTGRES_WEB_PASSWORD'" -f /deploy/bootstrap_roles.sql
+
+  migrate:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_OWNER}:${POSTGRES_OWNER_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      roles:
+        condition: service_completed_successfully
+    command: ["python", "manage.py", "migrate"]
+
+  # Re-granted after every migrate: a new table arrives unprotected otherwise.
+  # verify_grants.sql raises if the audit table came back rewritable, so a
+  # failure here stops the deploy instead of printing a 'f' nobody reads.
+  grants:
+    image: postgres:16-alpine
+    env_file: .env
+    environment:
+      PGPASSWORD: ${POSTGRES_OWNER_PASSWORD}
+    volumes:
+      - ./deploy:/deploy:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    entrypoint: ["sh", "-c"]
+    command:
+      - psql -h db -U "$$POSTGRES_OWNER" -d "$$POSTGRES_DB" -f /deploy/grants.sql
+        && psql -h db -U "$$POSTGRES_OWNER" -d "$$POSTGRES_DB" -f /deploy/verify_grants.sql
+
   web:
     build: .
     env_file: .env
@@ -25,8 +71,8 @@ services:
       # The app runs as the restricted role, which cannot rewrite audit rows.
       DATABASE_URL: postgres://${POSTGRES_WEB_USER}:${POSTGRES_WEB_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
-      db:
-        condition: service_healthy
+      grants:
+        condition: service_completed_successfully
     restart: unless-stopped
     # A wedged gunicorn keeps the port open and answers nothing; without a
     # check, `restart: unless-stopped` never notices.
@@ -38,10 +84,11 @@ services:
       retries: 3
       start_period: 20s
     # Migrations are NOT run here: they need the owner role, and running them
-    # from an app container races when there is more than one. See DEPLOYMENT.md.
+    # from an app container races when there is more than one. The `migrate`
+    # service above does it once, before web starts. See DEPLOYMENT.md.
 
-  # One-shot admin container. Runs as the owner role, for migrations and grants.
-  #   docker compose run --rm admin python manage.py migrate
+  # Interactive owner-role container: createsuperuser, shell, ad-hoc commands.
+  #   docker compose run --rm admin python manage.py createsuperuser
   admin:
     build: .
     env_file: .env
