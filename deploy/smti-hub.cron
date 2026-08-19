@@ -16,5 +16,5 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # unreachable: the command refuses rather than deactivating everybody.
 30 2 * * * root cd /opt/smti-hub && docker compose run --rm --no-TTY web python manage.py sync_ad 2>&1 | logger -t smti-hub
 
-# Backups. See deploy/backup.sh.
+# Backups. Passphrase comes from .env. See deploy/backup.sh.
 0 1 * * * root cd /opt/smti-hub && ./deploy/backup.sh 2>&1 | logger -t smti-hub
