@@ -56,10 +56,9 @@
       <div class="topbar-inner">
         <div class="crumb">{% block crumb %}<b>{{ heading|default:"SMTI HUB" }}</b>{% endblock %}</div>
         <div class="spacer"></div>
+        <span class="pill mono" id="watClock" title="West Africa Time (UTC+1)">…</span>
         {% if open_year %}
           <span class="pill mono">{{ open_year.label }}</span>
-          <span class="pill mono" id="yearClock" data-ends="{{ open_year.ends_at.isoformat }}"
-                title="Time left in {{ open_year.label }}">…</span>
           {% if open_year.closed %}
             <span class="pill closed mono"><svg class="ic-xs" aria-hidden="true"><use href="#i-lock"></use></svg>Closed</span>
           {% endif %}

@@ -19,12 +19,59 @@
     <div class="stat-n">one or several analysts</div></div>
 </div>
 
+<form method="get" class="filters">
+  <input type="hidden" name="month" value="{{ month }}">
+  <label class="sr-only" for="q">Search tasks</label>
+  <input type="search" id="q" name="q" value="{{ q }}" placeholder="Search by task title, description or analyst…">
+  <label class="sr-only" for="who">Analyst</label>
+  <select id="who" name="who">
+    <option value="">All analysts</option>
+    {% for a in analysts %}
+      <option value="{{ a.pk }}" {% if a.pk|stringformat:"s" == who %}selected{% endif %}>{{ a.name }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn sm primary" type="submit">Search</button>
+  {% if filtered %}<a class="filters-clear" href="{% url 'tasks' %}?month={{ month }}">Clear</a>{% endif %}
+</form>
+{% if filtered %}<p class="sub" style="margin:-8px 0 16px">
+  Filtered — every count and the CSV export below follow this filter.</p>{% endif %}
+
+<div class="card">
+  <div class="card-head"><span class="card-title">Everyone — {{ year.label }} to date</span>
+    <span class="card-note">The whole year, not just {{ months|index:month|index:1 }}</span></div>
+  <div class="tw"><table>
+    <thead><tr><th>Analyst</th><th style="width:120px">Tasks</th><th style="width:110px">Open</th>
+      <th style="width:150px">Awaiting review</th><th style="width:110px">Overdue</th>
+      <th style="width:220px">Completed</th></tr></thead>
+    <tbody>
+    {% for row in overview %}
+      <tr>
+        <td><a href="?month={{ month }}&amp;who={{ row.employee.pk }}" class="who-cell">
+          <span class="avatar">{{ row.employee.initials }}</span>
+          <span>{{ row.employee.name }}</span></a></td>
+        <td class="num">{{ row.total }}</td>
+        <td class="num">{{ row.open }}</td>
+        <td class="num {% if row.review %}s-warn{% endif %}">{{ row.review }}</td>
+        <td class="num {% if row.overdue %}s-bad{% endif %}">{{ row.overdue }}</td>
+        <td><div style="display:flex;align-items:center;gap:8px">
+          <div class="bar" style="flex:1"><i style="width:{{ row.percent }}%"></i></div>
+          <span class="mono" style="font-size:12px;color:var(--muted)">{{ row.done }}/{{ row.total }}</span>
+        </div></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" style="padding:26px 18px;text-align:center;color:var(--faint)">
+        No tasks match.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
 <div class="card">
   <div class="card-head"><span class="card-title">Completed — waiting for your review</span>
     <span class="card-note">Approving a goal-linked task moves the score immediately</span></div>
   {% for item in pending %}{% include "hub/_task.html" %}{% empty %}
     <div style="padding:26px 18px;text-align:center;color:var(--faint);font-size:13px">
-      Nothing to review. The team is up to date.</div>
+      {% if filtered %}No task awaiting review matches.{% else %}Nothing to review. The team is up to date.{% endif %}</div>
   {% endfor %}
 </div>
 
@@ -33,8 +80,10 @@
     <div class="spacer" style="flex:1"></div>
     <form method="get" style="margin:0"><select name="month" onchange="this.form.submit()">
       {% for i, label in months %}<option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ label }}</option>{% endfor %}
-    </select></form>
-    <a href="?export=csv"><button class="btn sm">Export CSV</button></a></div>
+    </select>
+    <input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="who" value="{{ who }}"></form>
+    <a href="?month={{ month }}&amp;q={{ q|urlencode }}&amp;who={{ who }}&amp;export=csv">
+      <button class="btn sm">Export CSV</button></a></div>
 
   {% for person in people %}
     <div class="tw"><table>
@@ -76,7 +125,7 @@
     </table></div>
   {% empty %}
     <div style="padding:26px 18px;text-align:center;color:var(--faint);font-size:13px">
-      No tasks for this month yet. <a href="{% url 'task_new' %}">Assign some</a>.</div>
+      {% if filtered %}No task matches in this month.{% else %}No tasks for this month yet. <a href="{% url 'task_new' %}">Assign some</a>.{% endif %}</div>
   {% endfor %}
 </div>
 {% endblock %}

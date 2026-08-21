@@ -20,19 +20,35 @@
     <div class="stat-n">{% if average_grade %}average mark {{ average_grade|floatformat:0 }}/100{% else %}closed by your manager{% endif %}</div></div>
 </div>
 
+<form method="get" class="filters">
+  <label class="sr-only" for="q">Search your tasks</label>
+  <input type="search" id="q" name="q" value="{{ q }}" placeholder="Search your tasks by title or description…">
+  <label class="sr-only" for="status">Status</label>
+  <select id="status" name="status">
+    <option value="">Any status</option>
+    {% for value, label in statuses %}
+      <option value="{{ value }}" {% if value == status %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn sm primary" type="submit">Search</button>
+  {% if filtered %}<a class="filters-clear" href="{% url 'my_tasks' %}">Clear</a>{% endif %}
+</form>
+{% if filtered %}<p class="sub" style="margin:-8px 0 16px">
+  Showing matches only — the counts above follow the filter.</p>{% endif %}
+
 <div class="cols">
   <div class="card">
     <div class="card-head"><span class="card-title">Open</span>
       <span class="card-note">soonest due first</span></div>
     {% for item in open_tasks %}{% include "hub/_task.html" with mine=1 %}{% empty %}
-      <div style="padding:26px 18px;text-align:center;color:var(--faint);font-size:13px">All clear.</div>
+      <div style="padding:26px 18px;text-align:center;color:var(--faint);font-size:13px">{% if filtered %}No open task matches.{% else %}All clear.{% endif %}</div>
     {% endfor %}
   </div>
   <div class="card">
     <div class="card-head"><span class="card-title">Approved</span>
       <span class="card-note">{{ done_tasks|length }} confirmed by your manager</span></div>
     {% for item in done_tasks %}{% include "hub/_task.html" with mine=1 %}{% empty %}
-      <div style="padding:26px 18px;text-align:center;color:var(--faint);font-size:13px">Nothing approved yet.</div>
+      <div style="padding:26px 18px;text-align:center;color:var(--faint);font-size:13px">{% if filtered %}No approved task matches.{% else %}Nothing approved yet.{% endif %}</div>
     {% endfor %}
   </div>
 </div>

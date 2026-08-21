@@ -76,21 +76,18 @@
   }
 })();
 
-// Appraisal year countdown in the topbar, ticking once a second.
+// Topbar clock: real time in West Africa Time, whatever the viewer's own
+// timezone is. Intl does the offset, so there is no DST table to keep.
 (function () {
-  var el = document.getElementById("yearClock");
+  var el = document.getElementById("watClock");
   if (!el) return;
-  var ends = new Date(el.dataset.ends).getTime();
-  if (isNaN(ends)) { el.remove(); return; }
-
-  function pad(n) { return n < 10 ? "0" + n : String(n); }
+  var fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Lagos", weekday: "short", day: "numeric", month: "short",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+  });
 
   function tick() {
-    var left = ends - Date.now();
-    if (left <= 0) { el.textContent = "year ended"; return; }
-    var s = Math.floor(left / 1000);
-    el.textContent = pad(Math.floor(s / 3600) % 24) + ":" +
-                     pad(Math.floor(s / 60) % 60) + ":" + pad(s % 60);
+    el.textContent = fmt.format(new Date()) + " WAT";
     setTimeout(tick, 1000 - (Date.now() % 1000));
   }
   tick();

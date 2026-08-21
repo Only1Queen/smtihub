@@ -280,7 +280,21 @@ def _task_context(task):
 def tasks(request):
     year = _year(request)
     month = int(request.GET.get("month", _current_month(year)))
+    q = request.GET.get("q", "").strip()
+    who = request.GET.get("who", "")
+    today = timezone.localdate()
+
     qs = Task.objects.filter(year=year).select_related("assignee__user", "kpi__goal")
+    if q:
+        # Employee.name is a property, not a column — search the User fields it
+        # is built from, or the ORM cannot resolve it.
+        qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q)
+                       | Q(assignee__user__first_name__icontains=q)
+                       | Q(assignee__user__last_name__icontains=q)
+                       | Q(assignee__user__username__icontains=q))
+    if who:
+        qs = qs.filter(assignee_id=who)
+
     pending = [_task_context(t) for t in qs.filter(status=Task.SUBMITTED)]
     rest = [_task_context(t) for t in qs.filter(scoring_month=month).exclude(status=Task.SUBMITTED)]
 
@@ -292,6 +306,26 @@ def tasks(request):
     people = [{"employee": e, "items": items,
                "open": len([i for i in items if not i["task"].approved])}
               for e, items in sorted(by_person.items(), key=lambda kv: kv[0].name)]
+
+    # Holistic view: one row per analyst over the whole year, so the manager can
+    # see the shape of the team before drilling into a single month or person.
+    roll = {}
+    for task in qs:
+        row = roll.setdefault(task.assignee, {
+            "employee": task.assignee, "total": 0, "open": 0,
+            "review": 0, "overdue": 0, "done": 0})
+        row["total"] += 1
+        if task.approved:
+            row["done"] += 1
+        else:
+            row["open"] += 1
+            if task.status == Task.SUBMITTED:
+                row["review"] += 1
+            if task.due_date and task.due_date < today:
+                row["overdue"] += 1
+    overview = sorted(roll.values(), key=lambda r: r["employee"].name)
+    for row in overview:
+        row["percent"] = round(100 * row["done"] / row["total"]) if row["total"] else 0
 
     if request.GET.get("export") == "csv":
         # The whole year, not the month on screen: a spreadsheet of one month is
@@ -312,6 +346,9 @@ def tasks(request):
         "screen": "tasks",
         "pending": pending, "people": people, "month": month,
         "months": list(enumerate(scoring.MONTHS)), "year": year,
+        "q": q, "who": who, "overview": overview,
+        "analysts": Employee.objects.filter(active=True).select_related("user"),
+        "filtered": bool(q or who),
         "linked": qs.filter(scoring_month=month, kpi__isnull=False).count(),
         "open_count": qs.filter(scoring_month=month).exclude(status=Task.APPROVED).count(),
         "month_total": qs.filter(scoring_month=month).count(),
@@ -834,8 +871,14 @@ def my_tasks(request):
         raise ValidationError("Your account is not linked to an employee record.")
     year = _year(request)
     today = timezone.localdate()
+    q = request.GET.get("q", "").strip()
+    status = request.GET.get("status", "")
     qs = (Task.objects.filter(assignee=me, year=year)
           .select_related("kpi__goal").prefetch_related("updates"))
+    if q:
+        qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q))
+    if status:
+        qs = qs.filter(status=status)
 
     def rows(queryset):
         out = []
@@ -856,6 +899,8 @@ def my_tasks(request):
     return render(request, "hub/my_tasks.html", {
         "screen": "mytasks",
         "open_tasks": open_tasks, "done_tasks": done_tasks, "me": me, "year": year,
+        "q": q, "status": status, "statuses": Task.STATUS_CHOICES,
+        "filtered": bool(q or status),
         "waiting": len([i for i in open_tasks if i["task"].status == Task.SUBMITTED]),
         "overdue": len([i for i in open_tasks if i["overdue"]]),
         "average_grade": sum(graded) / len(graded) if graded else None,
