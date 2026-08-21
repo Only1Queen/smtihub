@@ -72,8 +72,8 @@
 </div>
 
 <div class="card">
-  <div class="card-head"><span class="card-title">Updates posted</span>
-    <span class="card-note">newest first · last {{ feed|length }} shown</span>
+  <div class="card-head"><span class="card-title">{% if can_review %}Updates to review{% else %}Updates posted{% endif %}</span>
+    <span class="card-note">newest first · {{ feed|length }} shown{% if can_review %} · reviewed ones move to <a href="{% url 'update_comments' %}">Update comments</a>{% endif %}</span>
     <div class="spacer" style="flex:1"></div>
     <a href="?export=notes{% if who %}&amp;who={{ who }}{% endif %}"><button class="btn sm">Export CSV</button></a></div>
   {% if people|length > 1 %}
@@ -94,10 +94,24 @@
           <div class="sub-who">{{ u.author.name }} ·
             <a href="{% url 'task_detail' u.task.pk %}">{{ u.task.title }}</a></div>
           <p>{{ u.note|linebreaksbr }}</p>
+          {% if u.manager_comment %}
+            <div class="verdict note"><b>{{ u.decided_by.get_full_name|default:u.decided_by.username }}:</b>
+              {{ u.manager_comment|linebreaksbr }}</div>
+          {% elif u.reviewed_at %}
+            <div class="verdict ok"><b>Reviewed</b> {{ u.reviewed_at|date:"j M, H:i" }}</div>
+          {% endif %}
+          {% if can_review %}
+            <form method="post" class="review-line">{% csrf_token %}
+              <input type="hidden" name="review" value="{{ u.pk }}">
+              <input type="text" name="comment" maxlength="2000"
+                     placeholder="Comment (optional) — the analyst sees this">
+              <button class="btn sm primary" type="submit">Mark reviewed</button>
+            </form>
+          {% endif %}
         </div>
       </div>
     {% empty %}
-      <p class="muted">No daily updates yet.</p>
+      <p class="muted">{% if can_review %}Nothing left to review.{% else %}No daily updates yet.{% endif %}</p>
     {% endfor %}
   </div>
 </div>

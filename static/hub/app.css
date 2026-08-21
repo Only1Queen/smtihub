@@ -457,6 +457,15 @@
   .trail-body p { margin: 5px 0 0; color: var(--text); }
   .trail-body .verdict { margin-top: 7px; color: var(--bad); }
   .trail-body .verdict.ok { color: var(--good); }
+  /* A manager's comment on a daily update is neither a rejection nor an
+     approval, so it borrows neither colour. */
+  .trail-body .verdict.note { color: var(--muted); }
+
+  /* One line under an update: optional comment, then the button that clears it
+     off the manager's queue. */
+  .review-line { display: flex; gap: 7px; margin-top: 9px; }
+  .review-line input { flex: 1; margin: 0; }
+  .review-line button { white-space: nowrap; }
 
   /* ── Daily update grid ──
      One square per day per analyst: filled means they posted, hollow means a

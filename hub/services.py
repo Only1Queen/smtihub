@@ -6,13 +6,16 @@ month is open. Closing the month writes the value into Score, after which no
 task change can move it.
 """
 
+from datetime import datetime, time, timedelta
+
 from django.db import transaction
+from django.urls import reverse
 from django.utils import timezone
 
 from hub import scoring
 from hub.audit import log_event
-from hub.models import (AppraisalYear, Kpi, Score, ScoredMonth, Task, TaskUpdate,
-                        month_is_scored)
+from hub.models import (Announcement, AppraisalYear, Kpi, Score, ScoredMonth, Task,
+                        TaskUpdate, month_is_scored)
 from hub.models import assigned_goal_ids as models_assigned_goal_ids
 
 
@@ -232,12 +235,12 @@ def daily_update(task, author, note):
     return update
 
 
-def expected_days(employee, days):
-    """The days this analyst actually owed an update: ones where they were
-    holding a task that was not yet completed.
+def open_task_days(employee, days):
+    """date -> the tasks this analyst was holding open that day.
 
     Without this every day before their first task counts as missed, and a grid
-    that is red for everybody says nothing about anybody.
+    that is red for everybody says nothing about anybody. The tasks come back
+    too, so a missed-update notice can name what went unreported.
     """
     spans = []
     for task in Task.objects.filter(assignee=employee).prefetch_related("updates"):
@@ -247,9 +250,15 @@ def expected_days(employee, days):
             decision = task.updates.filter(decision=TaskUpdate.APPROVED).first()
             finished = (timezone.localtime(decision.decided_at).date()
                         if decision and decision.decided_at else start)
-        spans.append((start, finished))
-    return {d for d in days
-            if any(s <= d and (e is None or d <= e) for s, e in spans)}
+        spans.append((start, finished, task))
+    return {d: [t for s, e, t in spans if s <= d and (e is None or d <= e)]
+            for d in days
+            if any(s <= d and (e is None or d <= e) for s, e, _ in spans)}
+
+
+def expected_days(employee, days):
+    """The days this analyst actually owed an update."""
+    return set(open_task_days(employee, days))
 
 
 def update_days(employee, start, end):
@@ -311,3 +320,100 @@ def current_year():
     """The open year, or the most recent one if every year is closed — so the
     app still renders read-only history rather than erroring out."""
     return open_year() or AppraisalYear.objects.order_by("-start_year").first()
+
+
+# How far back the notification feed and the missed-update check look. Anything
+# older is history, and history lives on the dashboard, not in a bell.
+NOTICE_DAYS = 14
+
+
+def review_update(update, actor, comment=""):
+    """The manager has read this daily update. It leaves their queue; the
+    comment, if there is one, goes where the analyst already reads decisions."""
+    update.reviewed_at = timezone.now()
+    update.decided_by = actor
+    update.decision_note = comment.strip()
+    update.save(update_fields=["reviewed_at", "decided_by", "decision_note"])
+    log_event(actor, "update.reviewed", f"{update.author.name} · {update.task.title}",
+              comment=update.decision_note)
+    return update
+
+
+def post_announcement(author, title, body):
+    if not title.strip() or not body.strip():
+        raise ValueError("An announcement needs a title and something to say.")
+    item = Announcement.objects.create(author=author, title=title.strip(), body=body.strip())
+    log_event(author.user, "announcement.posted", item.title)
+    return item
+
+
+def _end_of(day):
+    """A missed day is only missed once it is over, so its notice is stamped at
+    the end of it — otherwise today shows as missed all morning."""
+    return timezone.make_aware(datetime.combine(day, time(23, 59)))
+
+
+def missed_updates(people, days):
+    """(employee, date, tasks) for every weekday somebody owed an update and
+    none arrived. Weekends are not owed; today is not over yet."""
+    today = timezone.localdate()
+    out = []
+    for person in people:
+        owed = open_task_days(person, days)
+        if not owed:
+            continue
+        posted = update_days(person, min(days), max(days))
+        for day, tasks in owed.items():
+            if day.weekday() >= 5 or day >= today or day in posted:
+                continue
+            out.append((person, day, tasks))
+    return out
+
+
+def notifications(employee, people):
+    """Everything worth telling this person about, newest first.
+
+    Derived on read rather than written into a table: a stored copy is one more
+    thing that can disagree with the updates it describes, and there is nothing
+    here that cannot be recomputed from what already happened.
+    """
+    today = timezone.localdate()
+    days = [today - timedelta(days=i) for i in range(NOTICE_DAYS - 1, -1, -1)]
+    items = []
+
+    for a in Announcement.objects.select_related("author__user")[:20]:
+        items.append({"when": a.posted_at, "kind": "announcement",
+                      "title": f"Announcement — {a.title}",
+                      "text": a.body, "who": a.author.name,
+                      "url": reverse("announcements")})
+
+    if employee:
+        commented = (TaskUpdate.objects.filter(author=employee, reviewed_at__isnull=False)
+                     .exclude(decision_note="").select_related("task", "decided_by")[:40])
+        for u in commented:
+            items.append({"when": u.reviewed_at, "kind": "comment",
+                          "title": f"Comment on your update — {u.task.title}",
+                          "text": u.decision_note,
+                          "who": (u.decided_by.get_full_name() or u.decided_by.get_username()
+                                  if u.decided_by else "Your manager"),
+                          "url": reverse("task_detail", args=[u.task_id])})
+
+    for person, day, tasks in missed_updates(people, days):
+        mine = person == employee
+        names = ", ".join(t.title for t in tasks[:3])
+        items.append({
+            "when": _end_of(day), "kind": "missed",
+            "title": f"No daily update on {day:%a %-d %b}",
+            "text": (f"{'You' if mine else person.name} did not post an update that day, "
+                     f"with {len(tasks)} task{'' if len(tasks) == 1 else 's'} open: {names}."),
+            "who": person.name, "url": reverse("updates_dashboard")})
+
+    items.sort(key=lambda i: i["when"], reverse=True)
+    return items[:60]
+
+
+def unread_count(employee, people):
+    # ponytail: recomputes the whole feed for a badge on every page. Fine for one
+    # team; if this ever gets slow, store a per-employee count and bump it on write.
+    seen = employee.notifications_seen_at if employee else None
+    return len([i for i in notifications(employee, people) if not seen or i["when"] > seen])

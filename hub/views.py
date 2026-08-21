@@ -17,8 +17,8 @@ from hub import permissions, scoring, services, signals
 from hub.audit import log_event
 from hub.forms import (AcknowledgeForm, DecisionForm, EmployeeForm, GoalForm, KpiFormSet,
                        ReasonForm, SetPasswordForm, TaskForm, TaskUpdateForm)
-from hub.models import (AppraisalYear, AuditEvent, Employee, Goal, Kpi, Score, Task,
-                        TaskUpdate, YearAcknowledgement, month_is_scored)
+from hub.models import (Announcement, AppraisalYear, AuditEvent, Employee, Goal, Kpi,
+                        Score, Task, TaskUpdate, YearAcknowledgement, month_is_scored)
 from hub.permissions import manager_required, require
 
 
@@ -381,21 +381,40 @@ def task_detail(request, pk):
 DASHBOARD_DAYS = 28
 
 
+def audience(user):
+    """(me, the people whose updates I see) — a manager's active team plus
+    herself, or an analyst on their own. Every update screen scopes on this."""
+    me = permissions.employee_of(user)
+    if not permissions.is_manager(user):
+        return me, ([me] if me else [])
+    people = list(team_of(user).filter(active=True))
+    if me and me not in people:
+        people = [me] + people
+    return me, people
+
+
 @login_required
 def updates_dashboard(request):
     """Who posted an update on which day, what they said, and the box an analyst
     drops today's update into. Managers see the team, analysts see themselves.
     Weekends are marked, not counted as missed."""
-    me = permissions.employee_of(request.user)
-    people = list(team_of(request.user).filter(active=True)) if permissions.is_manager(request.user) \
-        else ([me] if me else [])
-    if me and permissions.is_manager(request.user) and me not in people:
-        people = [me] + people
+    me, people = audience(request.user)
 
     # Only tasks assigned to me, still open: goals are not updated here, and a
     # completed task has nothing left to report.
     my_open = list(Task.objects.filter(assignee=me).exclude(status=Task.APPROVED)
                    .select_related("kpi__goal")) if me else []
+
+    if request.method == "POST" and request.POST.get("review"):
+        update = get_object_or_404(TaskUpdate, pk=request.POST["review"])
+        require(permissions.can_review_update(request.user, update),
+                "You can only review your own team's updates.")
+        services.review_update(update, request.user, request.POST.get("comment", ""))
+        messages.success(request, f"Reviewed {update.author.name}'s update.")
+        # A name, never a URL from the form: taking a redirect target from POST
+        # is how a login page ends up bouncing people off-site.
+        return redirect("update_comments" if request.POST.get("from") == "comments"
+                        else "updates_dashboard")
 
     if request.method == "POST":
         task = get_object_or_404(Task, pk=request.POST.get("task"))
@@ -434,8 +453,14 @@ def updates_dashboard(request):
             "expected": len([c for c in cells if c["expected"]]),
         })
 
+    # A manager's feed is a queue: reviewed updates leave it, so what is left is
+    # what still wants reading. Their own posts are not theirs to review, so they
+    # would never leave — an analyst's own feed keeps everything.
     feed = (TaskUpdate.objects.filter(author__in=people, decision=TaskUpdate.NOT_NEEDED)
-            .select_related("task", "author__user"))
+            .select_related("task", "author__user", "decided_by"))
+    manager = permissions.is_manager(request.user)
+    if manager:
+        feed = feed.filter(reviewed_at__isnull=True).exclude(author=me)
     who = request.GET.get("who")
     if who:
         feed = feed.filter(author_id=who)
@@ -452,18 +477,93 @@ def updates_dashboard(request):
     if export == "notes":
         return csv_response(
             "smti-daily-updates",
-            ["Date", "Time", "Analyst", "Task", "Update"],
+            ["Date", "Time", "Analyst", "Task", "Update", "Reviewed", "Manager comment"],
             ([timezone.localtime(u.submitted_at).date(),
               timezone.localtime(u.submitted_at).strftime("%H:%M"),
-              u.author.name, u.task.title, u.note]
+              u.author.name, u.task.title, u.note,
+              timezone.localtime(u.reviewed_at).strftime("%Y-%m-%d %H:%M") if u.reviewed_at else "",
+              u.manager_comment]
              for u in feed))
 
     # The screen shows a readable page of them; the export is the lot.
     feed = list(feed[:80])
     return render(request, "hub/updates_dashboard.html", {
         "screen": "updates", "rows": rows, "days": days, "feed": feed, "who": who,
+        "can_review": manager,
         "people": people, "my_open": my_open, "me": me,
         "start": start, "today": today, "day_count": DASHBOARD_DAYS,
+    })
+
+
+@login_required
+@manager_required
+def update_comments(request):
+    """Every comment the manager has left on a daily update, in one place.
+
+    The dashboard queue empties as updates are reviewed, which is the point of
+    it — this is where what was said goes on living.
+    """
+    me, people = audience(request.user)
+    comments = (TaskUpdate.objects.filter(author__in=people, reviewed_at__isnull=False)
+                .exclude(decision_note="")
+                .select_related("task", "author__user", "decided_by")
+                .order_by("-reviewed_at"))
+    who = request.GET.get("who")
+    if who:
+        comments = comments.filter(author_id=who)
+
+    if request.GET.get("export") == "csv":
+        return csv_response(
+            "smti-update-comments",
+            ["Reviewed", "Analyst", "Task", "Update", "Manager", "Comment"],
+            ([timezone.localtime(c.reviewed_at).strftime("%Y-%m-%d %H:%M"), c.author.name,
+              c.task.title, c.note,
+              c.decided_by.get_full_name() or c.decided_by.get_username() if c.decided_by else "",
+              c.decision_note]
+             for c in comments))
+
+    return render(request, "hub/update_comments.html", {
+        "screen": "comments", "comments": list(comments[:200]), "people": people, "who": who,
+    })
+
+
+@login_required
+def announcements(request):
+    """The noticeboard. Managers post, everyone reads."""
+    manager = permissions.is_manager(request.user)
+    me = permissions.employee_of(request.user)
+
+    if request.method == "POST":
+        require(manager, "Only a manager can post an announcement.")
+        try:
+            services.post_announcement(me, request.POST.get("title", ""),
+                                       request.POST.get("body", ""))
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, "Announcement posted.")
+        return redirect("announcements")
+
+    return render(request, "hub/announcements.html", {
+        "screen": "announcements", "can_post": manager,
+        "items": list(Announcement.objects.select_related("author__user")[:50]),
+    })
+
+
+@login_required
+def notifications(request):
+    """One list: announcements, comments on your updates, and days an update was
+    owed and never came. Opening the page is what marks them read."""
+    me, people = audience(request.user)
+    items = services.notifications(me, people)
+    seen = me.notifications_seen_at if me else None
+    for item in items:
+        item["unread"] = not seen or item["when"] > seen
+    if me:
+        me.notifications_seen_at = timezone.now()
+        me.save(update_fields=["notifications_seen_at"])
+    return render(request, "hub/notifications.html", {
+        "screen": "notifications", "items": items, "days": services.NOTICE_DAYS,
     })
 
 

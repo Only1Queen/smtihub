@@ -23,6 +23,7 @@
         <a href="{% url 'goals' %}"><button {% if screen == 'goals' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-goals"></use></svg>Goals</button></a>
         <a href="{% url 'tasks' %}"><button {% if screen == 'tasks' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-tasks"></use></svg>Tasks<span class="badge {% if pending_count %}on{% endif %}">{{ pending_count }}</span></button></a>
         <a href="{% url 'updates_dashboard' %}"><button {% if screen == 'updates' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-clock"></use></svg>Daily updates</button></a>
+        <a href="{% url 'update_comments' %}"><button {% if screen == 'comments' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-comment"></use></svg>Update comments</button></a>
         <a href="{% url 'year_summary' %}"><button {% if screen == 'summary' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-summary"></use></svg>Year summary</button></a>
         <a href="{% url 'activity' %}"><button {% if screen == 'activity' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-activity"></use></svg>Activity</button></a>
       {% endif %}
@@ -32,6 +33,10 @@
       {% if not is_manager %}
         <a href="{% url 'updates_dashboard' %}"><button {% if screen == 'updates' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-clock"></use></svg>Daily updates</button></a>
       {% endif %}
+      <div class="nav-label">Everyone</div>
+      <a href="{% url 'announcements' %}"><button {% if screen == 'announcements' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-megaphone"></use></svg>Announcements</button></a>
+      <a href="{% url 'notifications' %}"><button {% if screen == 'notifications' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-bell"></use></svg>Notifications<span class="badge {% if unread_count %}on{% endif %}">{{ unread_count }}</span></button></a>
+
       <div class="nav-label">Account</div>
       <a href="{% url 'settings' %}"><button {% if screen == 'settings' %}aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-settings"></use></svg>Settings</button></a>
     </nav>

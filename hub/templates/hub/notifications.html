@@ -1,0 +1,33 @@
+{% extends "hub/base.html" %}
+{% block title %}Notifications — SMTI HUB{% endblock %}
+{% block crumb %}<b>Notifications</b>{% endblock %}
+{% block content %}
+<h1>Notifications</h1>
+<p class="sub">Announcements, comments on your updates, and days an update was owed
+  and never came. Last {{ days }} days. Opening this page marks them read.</p>
+
+<div class="card">
+  <div class="card-head"><span class="card-title">Everything</span>
+    <span class="card-note">newest first</span></div>
+  <div class="detail-body">
+    {% for n in items %}
+      <div class="trail-item">
+        <div class="trail-when">
+          <span class="mono">{{ n.when|date:"j M" }}</span>
+          <span class="mono" style="color:var(--faint)">{{ n.when|date:"H:i" }}</span></div>
+        <div class="trail-body">
+          <div class="sub-who">
+            <a href="{{ n.url }}"><b>{{ n.title }}</b></a>
+            <span class="st {% if n.kind == 'missed' %}st-back{% elif n.kind == 'comment' %}st-wait{% else %}st-prog{% endif %}"
+                  style="font-size:10px;padding:1px 7px">{{ n.kind }}</span>
+            {% if n.unread %}<span class="tag q mono">new</span>{% endif %}
+          </div>
+          <p>{{ n.text|linebreaksbr }}</p>
+        </div>
+      </div>
+    {% empty %}
+      <p class="muted">Nothing to tell you.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

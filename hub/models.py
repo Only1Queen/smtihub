@@ -23,6 +23,9 @@ class Employee(models.Model):
                                 related_name="reports")
     job_title = models.CharField(max_length=120, blank=True)
     active = models.BooleanField(default=True)
+    # One timestamp instead of a read-flag per notification: notifications are
+    # derived, not stored, so there is no row to mark.
+    notifications_seen_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["user__last_name", "user__username"]
@@ -318,11 +321,37 @@ class TaskUpdate(models.Model):
     decided_at = models.DateTimeField(null=True, blank=True)
     decision_note = models.TextField(blank=True)
 
+    # A daily update needs no decision, but the manager still has to clear it
+    # off the queue and be able to say something about it. Reviewing sets this
+    # and writes the comment into decision_note — the same field the trail
+    # already renders, so a manager's words live in one place.
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["-submitted_at"]
 
     def __str__(self):
         return f"{self.task.title} · {self.get_decision_display()}"
+
+    @property
+    def manager_comment(self):
+        return self.decision_note if self.reviewed_at else ""
+
+
+class Announcement(models.Model):
+    """Something the manager wants the whole team to read. No targeting, no
+    read receipts — one team, one noticeboard."""
+
+    author = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="announcements")
+    title = models.CharField(max_length=160)
+    body = models.TextField()
+    posted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-posted_at"]
+
+    def __str__(self):
+        return self.title
 
 
 class YearAcknowledgement(models.Model):

@@ -74,7 +74,14 @@
               <span class="st {{ u.proposed_status|status_class }}" style="font-size:10px;padding:1px 7px">
                 {{ u.proposed_status|update_label }}</span></div>
             <p>{{ u.note|default:"(no note)"|linebreaksbr }}</p>
-            {% if u.decision == 'returned' and u.decision_note %}
+            {% if u.decision == 'not_needed' and u.reviewed_at %}
+              {% if u.decision_note %}
+                <div class="verdict note"><b>{{ u.decided_by.get_full_name|default:u.decided_by.username }}:</b>
+                  {{ u.decision_note|linebreaksbr }}</div>
+              {% else %}
+                <div class="verdict ok"><b>Reviewed</b> {{ u.reviewed_at|date:"j M, H:i" }}</div>
+              {% endif %}
+            {% elif u.decision == 'returned' and u.decision_note %}
               <div class="verdict"><b>Sent back:</b> {{ u.decision_note }}</div>
             {% elif u.decision == 'approved' %}
               <div class="verdict ok"><b>Completed</b> by {{ u.decided_by.get_full_name|default:u.decided_by.username }}

@@ -1,0 +1,41 @@
+{% extends "hub/base.html" %}
+{% block title %}Announcements — SMTI HUB{% endblock %}
+{% block crumb %}<b>Announcements</b>{% endblock %}
+{% block content %}
+<h1>Announcements</h1>
+<p class="sub">Posted by the manager, read by everyone. Newest first.</p>
+
+{% if can_post %}
+<div class="card">
+  <div class="card-head"><span class="card-title">Post an announcement</span>
+    <span class="card-note">it shows up in everyone's notifications</span></div>
+  <form method="post" class="detail-body">{% csrf_token %}
+    <input type="text" name="title" maxlength="160" required placeholder="Title"
+           style="margin-bottom:10px">
+    <textarea name="body" rows="4" required placeholder="What the team needs to know."></textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px">
+      <button class="btn primary" type="submit">Post</button></div>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-head"><span class="card-title">Noticeboard</span>
+    <span class="card-note">{{ items|length }} posted</span></div>
+  <div class="detail-body">
+    {% for a in items %}
+      <div class="trail-item">
+        <div class="trail-when">
+          <span class="mono">{{ a.posted_at|date:"j M" }}</span>
+          <span class="mono" style="color:var(--faint)">{{ a.posted_at|date:"H:i" }}</span></div>
+        <div class="trail-body">
+          <div class="sub-who"><b>{{ a.title }}</b> · {{ a.author.name }}</div>
+          <p>{{ a.body|linebreaksbr }}</p>
+        </div>
+      </div>
+    {% empty %}
+      <p class="muted">Nothing posted yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

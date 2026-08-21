@@ -55,6 +55,14 @@ def can_submit_update(user, task):
     return employee_of(user) == task.assignee and task.status != task.APPROVED
 
 
+def can_review_update(user, update):
+    """Reviewing somebody's daily update is a manager act on their own report.
+    Nobody reviews their own — a self-cleared queue is not a queue."""
+    if employee_of(user) == update.author:
+        return False
+    return manages(user, update.author)
+
+
 def manager_required(view):
     @wraps(view)
     def wrapper(request, *args, **kwargs):

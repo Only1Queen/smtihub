@@ -1,7 +1,7 @@
 from django.contrib import admin
 
-from hub.models import (AppraisalYear, AuditEvent, Employee, Goal, GoalAssignment, Kpi,
-                        Score, ScoredMonth, Task, TaskUpdate)
+from hub.models import (Announcement, AppraisalYear, AuditEvent, Employee, Goal,
+                        GoalAssignment, Kpi, Score, ScoredMonth, Task, TaskUpdate)
 
 
 class KpiInline(admin.TabularInline):
@@ -51,6 +51,6 @@ class AuditEventAdmin(admin.ModelAdmin):
         return False
 
 
-admin.site.register([GoalAssignment, Score, ScoredMonth, TaskUpdate])
+admin.site.register([Announcement, GoalAssignment, Score, ScoredMonth, TaskUpdate])
 admin.site.site_header = "SMTI HUB administration"
 admin.site.site_title = "SMTI HUB"

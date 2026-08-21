@@ -1,0 +1,41 @@
+{% extends "hub/base.html" %}
+{% block title %}Update comments — SMTI HUB{% endblock %}
+{% block crumb %}<b>Update comments</b>{% endblock %}
+{% block content %}
+<h1>Update comments</h1>
+<p class="sub">Every comment left on a reviewed daily update, in one place.
+  The dashboard queue empties as updates are reviewed — this is where what was said stays.</p>
+
+<div class="card">
+  <div class="card-head"><span class="card-title">Comments</span>
+    <span class="card-note">{{ comments|length }} shown · newest first</span>
+    <div class="spacer" style="flex:1"></div>
+    <a href="?export=csv{% if who %}&amp;who={{ who }}{% endif %}"><button class="btn sm">Export CSV</button></a></div>
+  {% if people|length > 1 %}
+    <div class="detail-body" style="padding-bottom:0">
+      <a href="{% url 'update_comments' %}"><span class="tag mono">{% if not who %}▸ {% endif %}Everyone</span></a>
+      {% for p in people %}
+        <a href="?who={{ p.pk }}"><span class="tag mono">{% if who == p.pk|stringformat:"s" %}▸ {% endif %}{{ p.name }}</span></a>
+      {% endfor %}
+    </div>
+  {% endif %}
+  <div class="detail-body">
+    {% for c in comments %}
+      <div class="trail-item">
+        <div class="trail-when">
+          <span class="mono">{{ c.reviewed_at|date:"j M" }}</span>
+          <span class="mono" style="color:var(--faint)">{{ c.reviewed_at|date:"H:i" }}</span></div>
+        <div class="trail-body">
+          <div class="sub-who">{{ c.author.name }} ·
+            <a href="{% url 'task_detail' c.task.pk %}">{{ c.task.title }}</a></div>
+          <p style="color:var(--muted)">{{ c.note|linebreaksbr }}</p>
+          <div class="verdict note"><b>{{ c.decided_by.get_full_name|default:c.decided_by.username }}:</b>
+            {{ c.decision_note|linebreaksbr }}</div>
+        </div>
+      </div>
+    {% empty %}
+      <p class="muted">No comments yet. Review an update on the daily updates screen to leave one.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
