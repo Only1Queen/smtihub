@@ -19,11 +19,14 @@
     --good-sf:   #E2F0EA;
     --warn-sf:   #F6EEDC;
     --bad-sf:    #F6E4E7;
-    --shadow:    0 1px 1px rgba(17,26,28,.04);
+    --shadow:    0 1px 2px rgba(17,26,28,.05), 0 1px 3px -1px rgba(17,26,28,.06);
+    --shadow-md: 0 2px 4px -2px rgba(17,26,28,.08), 0 6px 16px -6px rgba(17,26,28,.14);
+    --shadow-lg: 0 4px 8px -4px rgba(17,26,28,.10), 0 18px 40px -18px rgba(17,26,28,.24);
     --shadow-pop:0 8px 28px -10px rgba(17,26,28,.28), 0 2px 6px -2px rgba(17,26,28,.10);
+    --ring:      0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
     /* One radius scale. Enterprise data tools stay square-ish; only status
        pills go fully round, because roundness there means "state", not style. */
-    --r-sm: 4px; --r-md: 6px; --r-lg: 8px;
+    --r-sm: 5px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px;
     --sel-chev-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2393A6AA' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     /* Widest the reading column goes; the shell itself stays full screen. */
     --content-max: 1680px;
@@ -37,8 +40,11 @@
       --accent:#4FA3B8; --accent-ink:#06181D; --accent-sf:#16323A;
       --good:#4CAF85; --warn:#D9A441; --bad:#E0697C;
       --good-sf:#123027; --warn-sf:#332711; --bad-sf:#341A20;
-      --shadow: 0 1px 1px rgba(0,0,0,.3);
+      --shadow: 0 1px 2px rgba(0,0,0,.35), 0 1px 3px -1px rgba(0,0,0,.30);
+      --shadow-md: 0 2px 4px -2px rgba(0,0,0,.45), 0 6px 16px -6px rgba(0,0,0,.55);
+      --shadow-lg: 0 4px 8px -4px rgba(0,0,0,.5), 0 18px 40px -18px rgba(0,0,0,.75);
       --shadow-pop: 0 8px 28px -10px rgba(0,0,0,.75), 0 2px 6px -2px rgba(0,0,0,.4);
+      --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent);
     }
   }
   :root[data-theme="dark"] {
@@ -47,8 +53,11 @@
     --accent:#4FA3B8; --accent-ink:#06181D; --accent-sf:#16323A;
     --good:#4CAF85; --warn:#D9A441; --bad:#E0697C;
     --good-sf:#123027; --warn-sf:#332711; --bad-sf:#341A20;
-    --shadow: 0 1px 1px rgba(0,0,0,.3);
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 1px 3px -1px rgba(0,0,0,.30);
+    --shadow-md: 0 2px 4px -2px rgba(0,0,0,.45), 0 6px 16px -6px rgba(0,0,0,.55);
+    --shadow-lg: 0 4px 8px -4px rgba(0,0,0,.5), 0 18px 40px -18px rgba(0,0,0,.75);
     --shadow-pop: 0 8px 28px -10px rgba(0,0,0,.75), 0 2px 6px -2px rgba(0,0,0,.4);
+    --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent);
   }
   :root[data-theme="light"] {
     --bg:#F2F5F5; --surface:#FFFFFF; --surface-2:#E9EFEF; --border:#D6E0E1;
@@ -56,8 +65,11 @@
     --accent:#2C6E7F; --accent-ink:#FFFFFF; --accent-sf:#E2EDEF;
     --good:#2E7D5B; --warn:#94620F; --bad:#A63D4E;
     --good-sf:#E2F0EA; --warn-sf:#F6EEDC; --bad-sf:#F6E4E7;
-    --shadow: 0 1px 1px rgba(17,26,28,.04);
+    --shadow: 0 1px 2px rgba(17,26,28,.05), 0 1px 3px -1px rgba(17,26,28,.06);
+    --shadow-md: 0 2px 4px -2px rgba(17,26,28,.08), 0 6px 16px -6px rgba(17,26,28,.14);
+    --shadow-lg: 0 4px 8px -4px rgba(17,26,28,.10), 0 18px 40px -18px rgba(17,26,28,.24);
     --shadow-pop: 0 8px 28px -10px rgba(17,26,28,.28), 0 2px 6px -2px rgba(17,26,28,.10);
+    --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
   }
 
   * { box-sizing: border-box; }
@@ -502,10 +514,18 @@
     display: inline-block; width: 15px; height: 15px; border-radius: 3px;
     background: var(--surface-2); border: 1px solid var(--border);
   }
-  .day.yes { background: var(--good); border-color: var(--good); }
-  .day.no { background: var(--bad-sf); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+  .day.posted { background: var(--good); border-color: var(--good); }
+  /* Half-filled, not a third colour nobody can name: the square shows at a
+     glance that part of the day's work went unreported. */
+  .day.part { background: linear-gradient(135deg, var(--good) 50%, var(--bad-sf) 50%);
+              border-color: var(--warn); }
+  .day.missed { background: var(--bad-sf); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
   .day.idle { background: var(--surface-2); border-color: var(--border); }
-  .day.wknd { background: transparent; border-style: dashed; }
+  .day.pending { background: var(--surface-2); border-color: var(--border-2); border-style: dotted; }
+  .day.leave { background: repeating-linear-gradient(45deg, var(--surface-2) 0 3px, var(--border) 3px 5px);
+               border-color: var(--border-2); }
+  .day.weekend { background: transparent; border-style: dashed; }
+  .day-cell a { display: inline-block; line-height: 0; }
   .day.now { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   /* ── Goal editor cards ── */
@@ -854,3 +874,111 @@
   .auth-foot { padding: 14px 22px 18px; }
   .auth-word { font-size: 24px; }
 }
+
+/* ── Elevation pass ───────────────────────────────────────────────────────
+   The flat build read as a wireframe. Everything below is depth only: the
+   layout, tokens and class names are unchanged, so every screen gets it at
+   once. Cards lift, controls press, the accent carries its own colour shadow.
+   ponytail: token-layer only — no template touched. */
+
+body {
+  /* Two very faint accent washes so the ground is not one dead flat fill. */
+  background-image:
+    radial-gradient(1200px 600px at 12% -8%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%),
+    radial-gradient(900px 500px at 100% 0%, color-mix(in srgb, var(--good) 5%, transparent), transparent 65%);
+  background-attachment: fixed;
+}
+
+/* Sidebar and topbar sit above the page, so they cast rather than outline. */
+.side {
+  background: color-mix(in srgb, var(--surface) 92%, var(--bg));
+  box-shadow: 1px 0 0 var(--border), 4px 0 24px -12px rgba(0,0,0,.18);
+  border-right: 0;
+  z-index: 2;
+}
+.topbar {
+  background: color-mix(in srgb, var(--surface) 70%, var(--bg));
+  box-shadow: 0 1px 0 var(--border), 0 6px 16px -12px rgba(0,0,0,.35);
+  border-bottom: 0;
+}
+.nav button { transition: background .14s, color .14s, box-shadow .14s, transform .14s; }
+.nav button:hover { transform: translateX(1px); }
+.nav button[aria-current="page"] {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, var(--surface-2)), var(--surface-2));
+  box-shadow: var(--shadow);
+}
+
+/* ── Cards, stats, dialogs ── */
+.card, .stat {
+  box-shadow: var(--shadow-md);
+  transition: box-shadow .18s ease, transform .18s ease;
+}
+.card:hover, .stat:hover { box-shadow: var(--shadow-lg); }
+.stat:hover { transform: translateY(-2px); }
+.stat { border-radius: var(--r-lg); position: relative; overflow: hidden; }
+/* A hairline of accent along the top edge — reads as a highlight, not a rule. */
+.stat::after {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent 70%);
+  opacity: .55;
+}
+.stat-v { letter-spacing: -.03em; }
+dialog { border-radius: var(--r-xl); box-shadow: var(--shadow-lg), var(--shadow-pop); }
+.auth-card { border-radius: var(--r-xl); box-shadow: var(--shadow-lg), var(--shadow-pop); }
+
+/* ── Buttons: real press behaviour ── */
+.btn {
+  box-shadow: var(--shadow);
+  transition: background .12s, border-color .12s, box-shadow .14s, transform .1s;
+}
+.btn:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.btn:active { transform: translateY(0); box-shadow: var(--shadow); }
+.btn.ghost { box-shadow: none; }
+.btn.ghost:hover { box-shadow: var(--shadow); }
+.btn.primary {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, #fff), var(--accent));
+  box-shadow: var(--shadow-md), 0 6px 18px -10px var(--accent);
+}
+.btn.primary:hover { box-shadow: var(--shadow-lg), 0 10px 24px -10px var(--accent); }
+
+/* ── Identity marks ── */
+.avatar {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 78%, #fff), var(--accent));
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.22);
+}
+
+/* ── Pills, tags, status ── */
+.pill, .tag, .st, .chip, .link-tag, .link-none, .mode-tag { box-shadow: var(--shadow); }
+.st { border-radius: 999px; padding: 3px 10px; }
+
+/* ── Tables ── */
+.card .tw { border-radius: 0 0 var(--r-lg) var(--r-lg); }
+thead th { background: color-mix(in srgb, var(--surface-2) 55%, var(--surface)); }
+tbody tr { transition: background .12s; }
+.bar, .wbar { box-shadow: inset 0 1px 2px rgba(0,0,0,.10); }
+.bar i, .wbar i { box-shadow: 0 1px 3px -1px var(--accent); }
+
+/* ── Inputs: a focus ring instead of a bare outline ── */
+input[type="text"], input[type="search"], input[type="email"], input[type="date"],
+input[type="password"], input[type="number"], textarea, select {
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.05);
+  transition: border-color .12s, box-shadow .14s;
+}
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  box-shadow: var(--ring);
+}
+
+/* ── Month tabs / segmented control ── */
+.months button[aria-selected="true"] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, #fff), var(--accent));
+  box-shadow: var(--shadow-md), 0 6px 16px -10px var(--accent);
+}
+.seg { box-shadow: inset 0 1px 2px rgba(0,0,0,.08); }
+.seg button[aria-pressed="true"] { box-shadow: var(--shadow-md); }
+
+/* ── Update grid + notices ── */
+.day { box-shadow: var(--shadow); }
+.day.posted { box-shadow: var(--shadow), 0 2px 8px -4px var(--good); }
+.notice { box-shadow: var(--shadow-md); border-radius: var(--r-lg); }
+.submission { box-shadow: var(--shadow); border-radius: var(--r-lg); }
+.switch { box-shadow: inset 0 1px 3px rgba(0,0,0,.18); }
