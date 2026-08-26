@@ -46,6 +46,10 @@ class Employee(models.Model):
     def is_manager(self):
         return self.reports.exists()
 
+    @property
+    def on_leave(self):
+        return self.leaves.filter(end_date__isnull=True).exists()
+
 
 class AppraisalYear(models.Model):
     label = models.CharField(max_length=40, unique=True)
@@ -336,6 +340,35 @@ class TaskUpdate(models.Model):
     @property
     def manager_comment(self):
         return self.decision_note if self.reviewed_at else ""
+
+
+class Leave(models.Model):
+    """A stretch of days an analyst owes no daily update.
+
+    Ended rather than deleted, and dated rather than a flag on Employee: the
+    coverage grid looks backwards, so "were they away on the 3rd?" has to keep
+    having an answer after they come back.
+    """
+
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="leaves")
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True, help_text="Empty means still away")
+    reason = models.CharField(max_length=200, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+                                   related_name="+")
+
+    class Meta:
+        ordering = ["-start_date"]
+
+    def __str__(self):
+        return f"{self.employee.name} on leave from {self.start_date}"
+
+    def covers(self, day):
+        return self.start_date <= day and (self.end_date is None or day <= self.end_date)
+
+    def clean(self):
+        if self.end_date and self.end_date < self.start_date:
+            raise ValidationError("Leave cannot end before it starts.")
 
 
 class Announcement(models.Model):

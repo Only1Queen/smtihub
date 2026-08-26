@@ -1,0 +1,50 @@
+{% extends "hub/base.html" %}
+{% block title %}{{ person.name }} · {{ day|date:"j M" }} — SMTI HUB{% endblock %}
+{% block crumb %}<a href="{% url 'updates_dashboard' %}">Daily updates</a> ›
+  <b>{{ person.name }} · {{ day|date:"j M Y" }}</b>{% endblock %}
+{% block content %}
+<h1>{{ day|date:"l j F Y" }}</h1>
+<p class="sub">{{ person.name }} ·
+  {% if on_leave %}on leave — no update was owed.
+  {% elif weekend %}weekend — no update was owed.
+  {% elif not covered and not missed %}no task was open that day.
+  {% elif not missed %}every open task was updated.
+  {% else %}{{ missed|length }} of {{ covered|length|add:missed|length }} open tasks went unreported.{% endif %}</p>
+
+<div class="card">
+  <div class="card-head"><span class="card-title">No update posted</span>
+    <span class="card-note">open that day, nothing said about it</span></div>
+  <div class="detail-body">
+    {% for t in missed %}
+      <div class="trail-item"><div class="trail-body">
+        <a href="{% url 'task_detail' t.pk %}">{{ t.title }}</a>
+        <div class="sub-who">{{ t.get_status_display }}{% if t.due_date %} · due {{ t.due_date|date:"j M" }}{% endif %}</div>
+      </div></div>
+    {% empty %}
+      <p class="muted">Nothing missed.</p>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><span class="card-title">Updated that day</span>
+    <span class="card-note">{{ updates|length }} update{{ updates|length|pluralize }}</span></div>
+  <div class="detail-body">
+    {% for u in updates %}
+      <div class="trail-item">
+        <div class="trail-when"><span class="mono">{{ u.submitted_at|date:"H:i" }}</span></div>
+        <div class="trail-body">
+          <div class="sub-who"><a href="{% url 'task_detail' u.task.pk %}">{{ u.task.title }}</a></div>
+          <p>{{ u.note|linebreaksbr }}</p>
+          {% if u.manager_comment %}
+            <div class="verdict note"><b>{{ u.decided_by.get_full_name|default:u.decided_by.username }}:</b>
+              {{ u.manager_comment|linebreaksbr }}</div>
+          {% endif %}
+        </div>
+      </div>
+    {% empty %}
+      <p class="muted">Nothing posted on this day.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from hub import scoring
 from hub.audit import log_event
-from hub.models import (Announcement, AppraisalYear, Kpi, Score, ScoredMonth, Task,
+from hub.models import (Announcement, AppraisalYear, Kpi, Leave, Score, ScoredMonth, Task,
                         TaskUpdate, month_is_scored)
 from hub.models import assigned_goal_ids as models_assigned_goal_ids
 
@@ -241,7 +241,13 @@ def open_task_days(employee, days):
     Without this every day before their first task counts as missed, and a grid
     that is red for everybody says nothing about anybody. The tasks come back
     too, so a missed-update notice can name what went unreported.
+
+    Days the analyst was on leave are dropped here rather than in each caller:
+    the grid, the missed-update notices and the CSV all route through this, and
+    a guard in one of them would leave the other two chasing someone on holiday.
     """
+    away = leave_days(employee, days)
+    days = [d for d in days if d not in away]
     spans = []
     for task in Task.objects.filter(assignee=employee).prefetch_related("updates"):
         start = timezone.localtime(task.created_at).date()
@@ -256,21 +262,80 @@ def open_task_days(employee, days):
             if any(s <= d and (e is None or d <= e) for s, e, _ in spans)}
 
 
+def leave_days(employee, days):
+    """Which of these days the analyst was signed off."""
+    spans = list(employee.leaves.all())
+    return {d for d in days if any(span.covers(d) for span in spans)}
+
+
 def expected_days(employee, days):
     """The days this analyst actually owed an update."""
     return set(open_task_days(employee, days))
 
 
-def update_days(employee, start, end):
-    """The dates this analyst posted anything, between two dates inclusive.
+def updates_by_day(employee, start, end):
+    """date -> the ids of the tasks this analyst posted about that day.
 
     Local dates, not UTC: an update posted at 9pm in Lagos belongs to that day,
     and the grid is read by people who were there when it happened.
     """
-    stamps = (TaskUpdate.objects.filter(author=employee, submitted_at__date__gte=start,
-                                        submitted_at__date__lte=end)
-              .values_list("submitted_at", flat=True))
-    return {timezone.localtime(s).date() for s in stamps}
+    out = {}
+    for task_id, stamp in (TaskUpdate.objects
+                           .filter(author=employee, submitted_at__date__gte=start,
+                                   submitted_at__date__lte=end)
+                           .values_list("task_id", "submitted_at")):
+        out.setdefault(timezone.localtime(stamp).date(), set()).add(task_id)
+    return out
+
+
+def update_days(employee, start, end):
+    """The dates this analyst posted anything, between two dates inclusive."""
+    return set(updates_by_day(employee, start, end))
+
+
+def day_coverage(employee, days):
+    """date -> (tasks covered by an update, tasks that went unreported).
+
+    A day with three open tasks and one update is not the same day as one with
+    three updates, and the grid was calling both of them green.
+    """
+    owed = open_task_days(employee, days)
+    if not owed:
+        return {}
+    posted = updates_by_day(employee, min(days), max(days))
+    out = {}
+    for day, tasks in owed.items():
+        done = posted.get(day, set())
+        out[day] = ([t for t in tasks if t.pk in done], [t for t in tasks if t.pk not in done])
+    return out
+
+
+@transaction.atomic
+def start_leave(employee, actor, start=None, reason=""):
+    """Mark somebody away. No update is owed until they are back."""
+    if employee.on_leave:
+        raise ValueError(f"{employee.name} is already marked on leave.")
+    leave = Leave(employee=employee, start_date=start or timezone.localdate(),
+                  reason=reason.strip(), created_by=actor)
+    leave.full_clean()
+    leave.save()
+    log_event(actor, "leave.start", employee.name, after=str(leave.start_date),
+              reason=leave.reason or None)
+    return leave
+
+
+@transaction.atomic
+def end_leave(employee, actor, end=None):
+    """Back at work: today onwards an update is expected again."""
+    leave = employee.leaves.filter(end_date__isnull=True).first()
+    if leave is None:
+        raise ValueError(f"{employee.name} is not marked on leave.")
+    leave.end_date = end or timezone.localdate()
+    leave.full_clean()
+    leave.save(update_fields=["end_date"])
+    log_event(actor, "leave.end", employee.name, before=str(leave.start_date),
+              after=str(leave.end_date))
+    return leave
 
 
 @transaction.atomic
@@ -339,6 +404,26 @@ def review_update(update, actor, comment=""):
     return update
 
 
+@transaction.atomic
+def set_reviewed(updates, actor, reviewed):
+    """Mark a batch of daily updates read or unread in one go.
+
+    Un-reviewing keeps the comment: it puts the update back in the queue, it
+    does not unsay what the manager wrote.
+    """
+    count = 0
+    for update in updates:
+        if reviewed:
+            review_update(update, actor, update.decision_note)
+        else:
+            update.reviewed_at = None
+            update.save(update_fields=["reviewed_at"])
+        count += 1
+    if count and not reviewed:
+        log_event(actor, "update.unreviewed", f"{count} daily update(s)")
+    return count
+
+
 def post_announcement(author, title, body):
     if not title.strip() or not body.strip():
         raise ValueError("An announcement needs a title and something to say.")
@@ -354,19 +439,20 @@ def _end_of(day):
 
 
 def missed_updates(people, days):
-    """(employee, date, tasks) for every weekday somebody owed an update and
-    none arrived. Weekends are not owed; today is not over yet."""
+    """(employee, date, tasks) for every weekday a task was open and nothing was
+    said about it.
+
+    Per task, not per day: an analyst holding three tasks who updates one of
+    them has still left two unreported, and the old day-level check called that
+    a clean day. Weekends and leave are not owed; today is not over yet.
+    """
     today = timezone.localdate()
     out = []
     for person in people:
-        owed = open_task_days(person, days)
-        if not owed:
-            continue
-        posted = update_days(person, min(days), max(days))
-        for day, tasks in owed.items():
-            if day.weekday() >= 5 or day >= today or day in posted:
+        for day, (_, missed) in day_coverage(person, days).items():
+            if day.weekday() >= 5 or day >= today or not missed:
                 continue
-            out.append((person, day, tasks))
+            out.append((person, day, missed))
     return out
 
 
@@ -398,15 +484,20 @@ def notifications(employee, people):
                                   if u.decided_by else "Your manager"),
                           "url": reverse("task_detail", args=[u.task_id])})
 
+    # Both sides get this: the analyst who owes the update and the manager who
+    # has to chase it. `people` is the audience of whoever is reading — an
+    # analyst's own list, a manager's team — so one loop serves both.
     for person, day, tasks in missed_updates(people, days):
         mine = person == employee
         names = ", ".join(t.title for t in tasks[:3])
         items.append({
             "when": _end_of(day), "kind": "missed",
-            "title": f"No daily update on {day:%a %-d %b}",
-            "text": (f"{'You' if mine else person.name} did not post an update that day, "
-                     f"with {len(tasks)} task{'' if len(tasks) == 1 else 's'} open: {names}."),
-            "who": person.name, "url": reverse("updates_dashboard")})
+            "title": f"No update on {len(tasks)} task"
+                     f"{'' if len(tasks) == 1 else 's'} — {day:%a %-d %b}",
+            "text": (f"{'You' if mine else person.name} posted nothing on "
+                     f"{names}{' and others' if len(tasks) > 3 else ''} that day."),
+            "who": person.name,
+            "url": reverse("updates_day", args=[person.pk, day.isoformat()])})
 
     items.sort(key=lambda i: i["when"], reverse=True)
     return items[:60]

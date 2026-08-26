@@ -1,6 +1,6 @@
 import csv
 import json
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -453,6 +453,17 @@ def updates_dashboard(request):
         return redirect("update_comments" if request.POST.get("from") == "comments"
                         else "updates_dashboard")
 
+    if request.method == "POST" and request.POST.get("read_all"):
+        require(permissions.is_manager(request.user), "Only a manager reviews updates.")
+        wanted = request.POST["read_all"] == "read"
+        batch = [u for u in _daily_feed(people, me, reviewed=not wanted,
+                                        who=request.POST.get("who"))
+                 if permissions.can_review_update(request.user, u)]
+        count = services.set_reviewed(batch, request.user, wanted)
+        messages.success(request, f"{count} update{'' if count == 1 else 's'} marked "
+                                  f"{'reviewed' if wanted else 'unread'}.")
+        return redirect("updates_dashboard")
+
     if request.method == "POST":
         task = get_object_or_404(Task, pk=request.POST.get("task"))
         require(permissions.can_submit_update(request.user, task),
@@ -469,38 +480,14 @@ def updates_dashboard(request):
     start = today - timedelta(days=DASHBOARD_DAYS - 1)
     days = [start + timedelta(days=i) for i in range(DASHBOARD_DAYS)]
 
-    rows = []
-    for person in people:
-        posted = services.update_days(person, start, today)
-        owed = services.expected_days(person, days)
-        cells = []
-        for d in days:
-            weekend = d.weekday() >= 5
-            expected = d in owed and not weekend
-            cells.append({
-                "date": d, "posted": d in posted, "weekend": weekend,
-                "today": d == today, "expected": expected,
-                "missed": expected and d not in posted,
-                "idle": not weekend and d not in owed,
-            })
-        rows.append({
-            "employee": person, "cells": cells,
-            "posted": len([c for c in cells if c["posted"]]),
-            "missed": len([c for c in cells if c["missed"]]),
-            "expected": len([c for c in cells if c["expected"]]),
-        })
+    rows = [_coverage_row(person, days, today) for person in people]
 
     # A manager's feed is a queue: reviewed updates leave it, so what is left is
     # what still wants reading. Their own posts are not theirs to review, so they
     # would never leave — an analyst's own feed keeps everything.
-    feed = (TaskUpdate.objects.filter(author__in=people, decision=TaskUpdate.NOT_NEEDED)
-            .select_related("task", "author__user", "decided_by"))
     manager = permissions.is_manager(request.user)
-    if manager:
-        feed = feed.filter(reviewed_at__isnull=True).exclude(author=me)
     who = request.GET.get("who")
-    if who:
-        feed = feed.filter(author_id=who)
+    feed = _daily_feed(people, me, reviewed=False if manager else None, who=who)
 
     export = request.GET.get("export")
     if export == "csv":
@@ -508,8 +495,7 @@ def updates_dashboard(request):
             "smti-update-coverage",
             ["Analyst", "Date", "Weekday", "State"],
             ([r["employee"].name, c["date"], c["date"].strftime("%A"),
-              "weekend" if c["weekend"] else "posted" if c["posted"]
-              else "no open task" if c["idle"] else "missed"]
+              c["state"]]
              for r in rows for c in r["cells"]))
     if export == "notes":
         return csv_response(
@@ -526,10 +512,109 @@ def updates_dashboard(request):
     feed = list(feed[:80])
     return render(request, "hub/updates_dashboard.html", {
         "screen": "updates", "rows": rows, "days": days, "feed": feed, "who": who,
-        "can_review": manager,
+        "can_review": manager, "reviewed_count": _daily_feed(people, me, reviewed=True).count(),
         "people": people, "my_open": my_open, "me": me,
         "start": start, "today": today, "day_count": DASHBOARD_DAYS,
     })
+
+
+def _daily_feed(people, me, reviewed=None, who=None):
+    """The daily-update queue. `reviewed` None means both; a manager never sees
+    their own, since they cannot review it and it would never leave."""
+    feed = (TaskUpdate.objects.filter(author__in=people, decision=TaskUpdate.NOT_NEEDED)
+            .select_related("task", "author__user", "decided_by"))
+    if reviewed is not None:
+        feed = feed.filter(reviewed_at__isnull=not reviewed).exclude(author=me)
+    if who:
+        feed = feed.filter(author_id=who)
+    return feed
+
+
+def _cell_state(covered, missed, owed):
+    """One square on the coverage grid.
+
+    "part" is the state the grid used to lie about: some of the day's open
+    tasks reported, not all of them. "pending" is today with time left on it —
+    an empty square this afternoon is not yet a missed day.
+    """
+    if not covered and not missed:
+        return "idle"
+    if not missed:
+        return "posted"
+    if not owed:
+        return "part" if covered else "pending"
+    return "part" if covered else "missed"
+
+
+def _coverage_row(person, days, today):
+    coverage = services.day_coverage(person, days)
+    away = services.leave_days(person, days)
+    cells = []
+    for d in days:
+        covered, missed = coverage.get(d, ([], []))
+        weekend = d.weekday() >= 5
+        # Weekends and leave are owed nothing, and today is not over yet.
+        owed = not weekend and d not in away and d < today
+        if weekend:
+            state = "weekend"
+        elif d in away:
+            state = "leave"
+        else:
+            state = _cell_state(covered, missed, owed)
+        cells.append({
+            "date": d, "state": state, "today": d == today,
+            "covered": len(covered), "missed": len(missed) if owed else 0,
+            "open": len(covered) + len(missed),
+        })
+    return {
+        "employee": person, "cells": cells, "on_leave": person.on_leave,
+        "posted": len([c for c in cells if c["covered"]]),
+        "missed": sum(c["missed"] for c in cells),
+        "expected": len([c for c in cells if c["state"] in ("posted", "part", "missed")]),
+    }
+
+
+@login_required
+def updates_day(request, employee_id, day):
+    """One analyst, one day: which open tasks got an update and which did not.
+
+    The grid says a day went wrong; this is the screen that says which task.
+    """
+    person = get_object_or_404(Employee, pk=employee_id)
+    require(permissions.can_view_employee(request.user, person),
+            "You can only open your own team's days.")
+    try:
+        the_day = date.fromisoformat(day)
+    except ValueError:
+        return HttpResponseBadRequest("Bad date.")
+    covered, missed = services.day_coverage(person, [the_day]).get(the_day, ([], []))
+    return render(request, "hub/updates_day.html", {
+        "screen": "updates", "person": person, "day": the_day,
+        "covered": covered, "missed": missed,
+        "on_leave": bool(services.leave_days(person, [the_day])),
+        "weekend": the_day.weekday() >= 5,
+        "updates": TaskUpdate.objects.filter(author=person, submitted_at__date=the_day)
+                   .select_related("task", "decided_by"),
+    })
+
+
+@login_required
+@manager_required
+def employee_leave(request, pk):
+    """On leave / back from leave. While away no daily update is expected, and
+    nobody is chased for one."""
+    emp = get_object_or_404(Employee, pk=pk)
+    require(permissions.manages(request.user, emp), "Not your report.")
+    try:
+        if emp.on_leave:
+            services.end_leave(emp, request.user)
+            messages.success(request, f"{emp.name} is back — daily updates expected again.")
+        else:
+            services.start_leave(emp, request.user, reason=request.POST.get("reason", ""))
+            messages.success(request, f"{emp.name} is on leave — no daily update required.")
+    except ValueError as exc:
+        messages.error(request, str(exc))
+    return redirect("updates_dashboard" if request.POST.get("next") == "updates" else "team")
 
 
 @login_required
