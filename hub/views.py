@@ -386,6 +386,34 @@ def task_new(request):
 
 
 @login_required
+@manager_required
+def task_edit(request, pk):
+    """Fix a task after the fact: wrong wording, wrong date, wrong owner.
+
+    Same form as creation, so the KPI and weight rules stay in one place; the
+    model refuses the changes that would rewrite marks already given.
+    """
+    task = get_object_or_404(Task.objects.select_related("assignee__user", "kpi__goal"), pk=pk)
+    require(permissions.manages(request.user, task.assignee), "That task is not yours to edit.")
+    before = f"{task.title} · {task.assignee.name} · {task.month_label}"
+    form = TaskForm(request.POST or None, instance=task)
+    if request.method == "POST" and form.is_valid():
+        try:
+            task = form.save(created_by=request.user)[0]
+        except ValidationError as exc:
+            for msg in exc.messages:
+                form.add_error(None, msg)
+        else:
+            log_event(request.user, "task.update", f"{task.assignee.name} · {task.title}",
+                      before=before,
+                      after=f"{task.title} · {task.assignee.name} · {task.month_label}")
+            messages.success(request, "Task updated.")
+            return redirect("task_detail", pk=task.pk)
+    return render(request, "hub/task_form.html",
+                  {"form": form, "year": task.year, "task": task})
+
+
+@login_required
 def task_detail(request, pk):
     """Everything about one task on one page: what it is, where it is, the whole
     trail, and the box the analyst drops a daily update into."""
@@ -409,6 +437,7 @@ def task_detail(request, pk):
     return render(request, "hub/task_detail.html", {
         "task": task, "trail": list(task.updates.all()), "mine": mine,
         "can_decide": permissions.can_decide_task(request.user, task),
+        "can_edit": permissions.manages(request.user, task.assignee),
         "screen": "mytasks" if mine else "tasks",
         "overdue": bool(task.due_date and task.due_date < timezone.localdate()
                         and not task.approved),

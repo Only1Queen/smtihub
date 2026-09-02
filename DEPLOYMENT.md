@@ -367,6 +367,7 @@ where a failed run shows up. Check the reminder by hand first:
 
 ```bash
 docker compose run --rm admin python manage.py send_reminders --dry-run
+docker compose run --rm admin python manage.py notify_overdue --dry-run
 ```
 
 ### Clearing a lockout

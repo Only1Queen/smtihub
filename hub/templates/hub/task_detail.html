@@ -5,7 +5,10 @@
   {% else %}<a href="{% url 'tasks' %}" style="color:var(--muted)">Tasks</a>{% endif %}
   / <b>{{ task.title }}</b>{% endblock %}
 {% block content %}
-<h1>{{ task.title }}</h1>
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+  <h1>{{ task.title }}</h1>
+  {% if can_edit %}<a href="{% url 'task_edit' task.pk %}"><button class="btn ghost">Edit task</button></a>{% endif %}
+</div>
 <p class="sub">{{ task.assignee.name }} · {{ task.assignee.job_title }} ·
   <span class="st {{ task.status|status_class }}">{{ task.get_status_display }}</span></p>
 

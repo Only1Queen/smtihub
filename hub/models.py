@@ -300,6 +300,24 @@ class Task(models.Model):
                 f"{scoring.MONTHS[self.scoring_month]} is already scored for "
                 f"{self.assignee.name}. A task added now cannot change that month."
             )
+        if self.pk is None:
+            return
+        # An edit is fine until the marks are in: after that, moving the task's
+        # month, KPI, weight or owner would rewrite a percentage somebody has
+        # already been given.
+        before = Task.objects.filter(pk=self.pk).first()
+        if before is None:
+            return
+        for field in ("scoring_month", "kpi_id", "weight", "assignee_id"):
+            if getattr(before, field) == getattr(self, field):
+                continue
+            for emp, month in ((before.assignee, before.scoring_month),
+                               (self.assignee, self.scoring_month)):
+                if month_is_scored(emp, self.year, month):
+                    raise ValidationError(
+                        f"{scoring.MONTHS[month]} is already scored for {emp.name}, so this "
+                        f"task's scoring cannot change. Reopen the month first."
+                    )
 
 
 class TaskUpdate(models.Model):

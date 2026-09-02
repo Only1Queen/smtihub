@@ -18,7 +18,7 @@
         <div class="trail-body">
           <div class="sub-who">
             <a href="{{ n.url }}"><b>{{ n.title }}</b></a>
-            <span class="st {% if n.kind == 'missed' %}st-back{% elif n.kind == 'comment' %}st-wait{% else %}st-prog{% endif %}"
+            <span class="st {% if n.kind == 'missed' or n.kind == 'overdue' %}st-back{% elif n.kind == 'comment' %}st-wait{% else %}st-prog{% endif %}"
                   style="font-size:10px;padding:1px 7px">{{ n.kind }}</span>
             {% if n.unread %}<span class="tag q mono">new</span>{% endif %}
           </div>

@@ -4,11 +4,19 @@ Each test here corresponds to a way the appraisal number could otherwise become
 non-reproducible or unfair.
 """
 
+from datetime import timedelta
+from io import StringIO
+
+from django.core import mail
+from django.core.management import call_command
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.urls import reverse
+from django.utils import timezone
 
 from hub import scoring, services
-from hub.models import Score, Task, TaskUpdate
+from hub.models import Employee, Score, ScoredMonth, Task, TaskUpdate
 from hub.tests import factories as f
 
 
@@ -167,3 +175,92 @@ class ApprovalFlowTests(TestCase):
         services.submit_update(task, self.a, "done")
         task.refresh_from_db()
         self.assertEqual(task.status, Task.SUBMITTED)  # submitted, not approved
+
+
+class TaskEditTests(TestCase):
+    """A manager can correct a task after assigning it — until the marks are in."""
+
+    def setUp(self):
+        self.year = f.year()
+        self.boss = f.make_employee("manager", "SMTI Manager", is_manager=True)
+        self.a = f.make_employee("bello", "A Bello", manager=self.boss)
+        self.b = f.make_employee("jimoh", "I Jimoh", manager=self.boss)
+        f.assign_all(self.a)
+        f.assign_all(self.b)
+        self.task = f.make_task(self.a, self.boss.user, title="Wrong title")
+
+    def _post(self, **overrides):
+        data = {"title": "Right title", "description": "", "due_date": "",
+                "scoring_month": self.task.scoring_month, "kpi": "", "weight": "",
+                "assignees": self.a.pk}
+        data.update(overrides)
+        return self.client.post(reverse("task_edit", args=[self.task.pk]), data)
+
+    def test_manager_edits_title_and_reassigns(self):
+        self.client.force_login(self.boss.user)
+        self.assertEqual(self._post(assignees=self.b.pk).status_code, 302)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, "Right title")
+        self.assertEqual(self.task.assignee, self.b)
+
+    def test_analyst_cannot_edit_their_own_task(self):
+        self.client.force_login(self.a.user)
+        self.assertEqual(self._post().status_code, 403)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, "Wrong title")
+
+    def test_scoring_cannot_move_once_the_month_is_scored(self):
+        ScoredMonth.objects.create(employee=self.a, year=self.year, month_index=0,
+                                   closed_by=self.boss.user)
+        self.client.force_login(self.boss.user)
+        response = self._post(scoring_month=1)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "already scored")
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.scoring_month, 0)
+
+    def test_wording_still_editable_in_a_scored_month(self):
+        ScoredMonth.objects.create(employee=self.a, year=self.year, month_index=0,
+                                   closed_by=self.boss.user)
+        self.client.force_login(self.boss.user)
+        self.assertEqual(self._post().status_code, 302)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, "Right title")
+
+
+class OverdueNoticeTests(TestCase):
+    def setUp(self):
+        self.boss = f.make_employee("manager", "SMTI Manager", is_manager=True)
+        self.a = f.make_employee("bello", "A Bello", manager=self.boss)
+        self.a.user.email = "bello@example.com"
+        self.a.user.save(update_fields=["email"])
+        f.assign_all(self.a)
+        self.task = f.make_task(self.a, self.boss.user, title="Late one")
+        Task.objects.filter(pk=self.task.pk).update(
+            due_date=timezone.localdate() - timedelta(days=2))
+
+    def test_overdue_task_is_notified(self):
+        self.assertEqual([t.pk for _, t in services.overdue_tasks([self.a])], [self.task.pk])
+        kinds = [n["kind"] for n in services.notifications(self.a, [self.a])]
+        self.assertIn("overdue", kinds)
+
+    def test_nobody_on_leave_is_chased(self):
+        services.start_leave(self.a, self.boss.user)
+        self.assertEqual(services.overdue_tasks([Employee.objects.get(pk=self.a.pk)]), [])
+
+    def test_daily_mail_lists_the_overdue_task(self):
+        out = StringIO()
+        call_command("notify_overdue", stdout=out)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Late one", mail.outbox[0].body)
+        self.assertEqual(mail.outbox[0].to, [self.a.user.email])
+
+    def test_nobody_on_leave_is_mailed(self):
+        services.start_leave(self.a, self.boss.user)
+        call_command("notify_overdue", stdout=StringIO())
+        self.assertEqual(mail.outbox, [])
+
+    def test_completed_task_is_not_overdue(self):
+        update = services.submit_update(self.task, self.a, "done")
+        services.decide_update(update, self.boss.user, approve=True)
+        self.assertEqual(services.overdue_tasks([self.a]), [])

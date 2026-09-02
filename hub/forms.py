@@ -96,13 +96,20 @@ class TaskForm(forms.ModelForm):
 
     def __init__(self, *args, year=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.year = year
-        self.instance.year = year
+        self.year = year or (self.instance.year if self.instance.pk else None)
+        if not self.instance.pk:
+            self.instance.year = year
+        else:
+            # Editing one task: it belongs to one analyst, so the tick-list of
+            # people to make copies for becomes a picker of who holds this one.
+            self.fields["assignees"] = forms.ModelChoiceField(
+                queryset=Employee.objects.filter(active=True), label="Assigned to",
+                initial=self.instance.assignee_id)
         self.fields["scoring_month"] = forms.TypedChoiceField(
             choices=[(i, m) for i, m in enumerate(scoring.MONTHS)], coerce=int,
             label="Scoring month",
             help_text="Set explicitly, so a task's month never shifts if the due date moves.")
-        self.fields["kpi"].queryset = Kpi.objects.filter(goal__year=year).select_related("goal")
+        self.fields["kpi"].queryset = Kpi.objects.filter(goal__year=self.year).select_related("goal")
         self.fields["kpi"].required = False
         self.fields["kpi"].label = "Counts toward"
         self.fields["kpi"].empty_label = "Nothing — operational task"
@@ -126,6 +133,14 @@ class TaskForm(forms.ModelForm):
         """All or nothing: if one analyst's task is invalid, nobody gets one, so
         the manager fixes it and submits once rather than chasing duplicates."""
         shared = {f: self.cleaned_data[f] for f in self.Meta.fields}
+        if self.instance.pk:
+            task = self.instance
+            for field, value in shared.items():
+                setattr(task, field, value)
+            task.assignee = self.cleaned_data["assignees"]
+            task.full_clean()
+            task.save()
+            return [task]
         tasks = []
         for employee in self.cleaned_data["assignees"]:
             task = Task(year=self.year, assignee=employee, created_by=created_by, **shared)

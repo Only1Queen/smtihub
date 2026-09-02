@@ -1,16 +1,23 @@
 {% extends "hub/base.html" %}
-{% block title %}New task — SMTI HUB{% endblock %}
-{% block crumb %}<a href="{% url 'tasks' %}" style="color:var(--muted)">Tasks</a> / <b>New task</b>{% endblock %}
+{% block title %}{% if task %}Edit task{% else %}New task{% endif %} — SMTI HUB{% endblock %}
+{% block crumb %}<a href="{% url 'tasks' %}" style="color:var(--muted)">Tasks</a> /
+  <b>{% if task %}Edit task{% else %}New task{% endif %}</b>{% endblock %}
 {% block content %}
-<h1>New task</h1>
-<p class="sub">Assign work to one analyst or several. Linking it to a KPI makes it count toward
-  that goal.</p>
+<h1>{% if task %}Edit task{% else %}New task{% endif %}</h1>
+{% if task %}
+  <p class="sub">Changing the scoring month, KPI, weight or owner is refused once that month
+    has been scored — reopen the month first.</p>
+{% else %}
+  <p class="sub">Assign work to one analyst or several. Linking it to a KPI makes it count toward
+    that goal.</p>
+{% endif %}
 <div class="card">
   <form method="post" class="form-body">{% csrf_token %}
     {% include "hub/_form.html" %}
     <div class="dlg-actions">
-      <a href="{% url 'tasks' %}"><button type="button" class="btn ghost">Cancel</button></a>
-      <button class="btn primary" type="submit">Create task</button></div>
+      <a href="{% if task %}{% url 'task_detail' task.pk %}{% else %}{% url 'tasks' %}{% endif %}">
+        <button type="button" class="btn ghost">Cancel</button></a>
+      <button class="btn primary" type="submit">{% if task %}Save changes{% else %}Create task{% endif %}</button></div>
   </form>
 </div>
 {% endblock %}

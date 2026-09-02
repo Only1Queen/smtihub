@@ -12,6 +12,10 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # Month-end reminder to the manager: unscored months and tasks awaiting approval.
 0 9 1 * * root cd /opt/smti-hub && docker compose run --rm --no-TTY web python manage.py send_reminders 2>&1 | logger -t smti-hub
 
+# Daily nudge to each analyst about their own overdue tasks. Weekdays only, and
+# nobody on leave is mailed.
+0 8 * * 1-5 root cd /opt/smti-hub && docker compose run --rm --no-TTY web python manage.py notify_overdue 2>&1 | logger -t smti-hub
+
 # Close accounts that Active Directory has closed. Safe to run when AD is
 # unreachable: the command refuses rather than deactivating everybody.
 30 2 * * * root cd /opt/smti-hub && docker compose run --rm --no-TTY web python manage.py sync_ad 2>&1 | logger -t smti-hub

@@ -456,6 +456,20 @@ def missed_updates(people, days):
     return out
 
 
+def overdue_tasks(people):
+    """(employee, task) for every open task past its due date.
+
+    Anyone signed off is skipped: chasing somebody on leave for a deadline they
+    are not at work for is the same noise as chasing them for a daily update.
+    """
+    today = timezone.localdate()
+    working = [p for p in people if not p.on_leave]
+    return [(t.assignee, t) for t in
+            Task.objects.filter(assignee__in=working, due_date__lt=today)
+            .exclude(status=Task.APPROVED)
+            .select_related("assignee__user").order_by("due_date")]
+
+
 def notifications(employee, people):
     """Everything worth telling this person about, newest first.
 
@@ -498,6 +512,19 @@ def notifications(employee, people):
                      f"{names}{' and others' if len(tasks) > 3 else ''} that day."),
             "who": person.name,
             "url": reverse("updates_day", args=[person.pk, day.isoformat()])})
+
+    for person, task in overdue_tasks(people):
+        mine = person == employee
+        days_late = (today - task.due_date).days
+        items.append({
+            "when": _end_of(task.due_date), "kind": "overdue",
+            "title": f"Overdue — {task.title}",
+            "text": (f"Due {task.due_date:%a %-d %b}, {days_late} day"
+                     f"{'' if days_late == 1 else 's'} ago, and still "
+                     f"{task.get_status_display().lower()}. "
+                     f"{'Post an update or send it for review.' if mine else ''}").strip(),
+            "who": person.name,
+            "url": reverse("task_detail", args=[task.pk])})
 
     items.sort(key=lambda i: i["when"], reverse=True)
     return items[:60]
