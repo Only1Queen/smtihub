@@ -257,9 +257,13 @@ def open_task_days(employee, days):
             finished = (timezone.localtime(decision.decided_at).date()
                         if decision and decision.decided_at else start)
         spans.append((start, finished, task))
-    return {d: [t for s, e, t in spans if s <= d and (e is None or d <= e)]
-            for d in days
-            if any(s <= d and (e is None or d <= e) for s, e, _ in spans)}
+    # The end is exclusive: once the manager confirms a task complete the analyst
+    # can no longer post on it, so counting the approval day as owed chases them
+    # for an update the app itself refuses to take.
+    def open_on(day):
+        return [t for s, e, t in spans if s <= day and (e is None or day < e)]
+
+    return {d: open_on(d) for d in days if open_on(d)}
 
 
 def leave_days(employee, days):

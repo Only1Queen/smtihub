@@ -233,6 +233,17 @@ class CoverageTests(TestCase):
         self.assertEqual([t.title for t in covered], ["Tune the SIEM"])
         self.assertEqual([t.title for t in missed], ["Write the runbook"])
 
+    def test_completed_task_is_not_chased_on_the_day_it_was_approved(self):
+        day = self._yesterday_weekday()
+        update = services.submit_update(self.two, self.a, "Done.", Task.SUBMITTED)
+        services.decide_update(update, self.boss.user, approve=True)
+        TaskUpdate.objects.filter(pk=update.pk).update(
+            decided_at=timezone.make_aware(datetime.combine(day, time(9))))
+        self._post_on(self.one, day)
+        covered, missed = services.day_coverage(self.a, [day])[day]
+        self.assertEqual([t.title for t in covered], ["Tune the SIEM"])
+        self.assertEqual(missed, [])
+
     def test_partial_day_still_notifies(self):
         day = self._yesterday_weekday()
         self._post_on(self.one, day)
