@@ -294,3 +294,51 @@ class BulkReviewTests(TestCase):
         response = self.client.post(reverse("updates_dashboard"), {"read_all": "read"})
         self.assertEqual(response.status_code, 403)
         self.assertEqual(TaskUpdate.objects.filter(reviewed_at__isnull=False).count(), 0)
+
+
+class HistoryTests(TestCase):
+    """A past month opens with every update it had, reviewed or not, and the
+    monthly summary counts days filled and missed from updates already posted."""
+
+    def setUp(self):
+        self.boss = f.make_employee("manager", "SMTI Manager", is_manager=True)
+        self.a = f.make_employee("bello", "A Bello", manager=self.boss)
+        f.assign_all(self.a)
+        self.task = f.make_task(self.a, self.boss.user, title="Tune the SIEM")
+        first = timezone.localdate().replace(day=1)
+        self.last_month = (first - timedelta(days=1)).replace(day=1)
+        Task.objects.filter(pk=self.task.pk).update(created_at=timezone.make_aware(
+            datetime.combine(self.last_month - timedelta(days=1), time(9))))
+        self.weekdays = [self.last_month + timedelta(days=i) for i in range(31)
+                         if (self.last_month + timedelta(days=i)).month == self.last_month.month
+                         and (self.last_month + timedelta(days=i)).weekday() < 5]
+        self.update = self._post_on(self.weekdays[0], "Old news.")
+        services.review_update(self.update, self.boss.user, "")
+
+    def _post_on(self, day, note):
+        update = services.daily_update(self.task, self.a, note)
+        TaskUpdate.objects.filter(pk=update.pk).update(
+            submitted_at=timezone.make_aware(datetime.combine(day, time(10))))
+        return update
+
+    def test_past_month_shows_reviewed_updates_to_both_sides(self):
+        url = reverse("updates_dashboard") + f"?month={self.last_month:%Y-%m}"
+        for person in (self.boss, self.a):
+            self.client.force_login(person.user)
+            self.assertContains(self.client.get(url), "Old news.")
+
+    def test_summary_counts_filled_and_missed_days(self):
+        self.client.force_login(self.a.user)
+        page = self.client.get(reverse("updates_dashboard") + f"?month={self.last_month:%Y-%m}")
+        row = page.context["summary"][0]
+        month = next(m for m in row["months"] if m["month"] == self.last_month)
+        self.assertEqual(month["owed"], len(self.weekdays))
+        self.assertEqual(month["filled"], 1)
+        self.assertEqual(month["missed"], len(self.weekdays) - 1)
+
+    def test_bad_or_future_month_falls_back_to_the_rolling_window(self):
+        self.client.force_login(self.a.user)
+        for value in ("nonsense", "2999-01"):
+            page = self.client.get(reverse("updates_dashboard") + f"?month={value}")
+            self.assertEqual(page.status_code, 200)
+            self.assertIsNone(page.context["month"])
