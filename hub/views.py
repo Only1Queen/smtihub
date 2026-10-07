@@ -1,5 +1,6 @@
 import csv
 import json
+from collections import Counter
 from datetime import date, timedelta
 
 from django.contrib import messages
@@ -506,17 +507,26 @@ def updates_dashboard(request):
         return redirect("updates_dashboard")
 
     today = timezone.localdate()
-    start = today - timedelta(days=DASHBOARD_DAYS - 1)
-    days = [start + timedelta(days=i) for i in range(DASHBOARD_DAYS)]
+    month = _month_param(request, today)
+    if month:
+        start, end = month, min(_next_month(month) - timedelta(days=1), today)
+    else:
+        start, end = today - timedelta(days=DASHBOARD_DAYS - 1), today
+    days = _days(start, end)
 
     rows = [_coverage_row(person, days, today) for person in people]
 
     # A manager's feed is a queue: reviewed updates leave it, so what is left is
     # what still wants reading. Their own posts are not theirs to review, so they
-    # would never leave — an analyst's own feed keeps everything.
+    # would never leave — an analyst's own feed keeps everything. A past month is
+    # history, not a queue: everything posted in it, reviewed or not.
     manager = permissions.is_manager(request.user)
     who = request.GET.get("who")
-    feed = _daily_feed(people, me, reviewed=False if manager else None, who=who)
+    if month:
+        feed = _daily_feed(people, me, who=who).filter(
+            submitted_at__date__gte=start, submitted_at__date__lte=end)
+    else:
+        feed = _daily_feed(people, me, reviewed=False if manager else None, who=who)
 
     export = request.GET.get("export")
     if export == "csv":
@@ -537,14 +547,68 @@ def updates_dashboard(request):
               u.manager_comment]
              for u in feed))
 
-    # The screen shows a readable page of them; the export is the lot.
-    feed = list(feed[:80])
+    # The appraisal year (May to April) holding the month on screen, so walking
+    # back past May brings last year's summary with it.
+    anchor = month or today
+    year_start = date(anchor.year if anchor.month >= 5 else anchor.year - 1, 5, 1)
+    year_days = _days(year_start, min(date(year_start.year + 1, 4, 30), today))
+    summary = [_month_summary(person, year_days, today) for person in people]
+    if export == "summary":
+        return csv_response(
+            "smti-update-summary",
+            ["Analyst", "Month", "Days owed", "Filled", "Partly filled", "Missed"],
+            ([r["employee"].name, m["month"].strftime("%b %Y"), m["owed"], m["filled"],
+              m["part"], m["missed"]] for r in summary for m in r["months"]))
+
+    # The screen shows a readable page of the queue; the export is the lot. A
+    # month is bounded already, so it shows whole.
+    feed = list(feed if month else feed[:80])
     return render(request, "hub/updates_dashboard.html", {
         "screen": "updates", "rows": rows, "days": days, "feed": feed, "who": who,
         "can_review": manager, "reviewed_count": _daily_feed(people, me, reviewed=True).count(),
         "people": people, "my_open": my_open, "me": me,
-        "start": start, "today": today, "day_count": DASHBOARD_DAYS,
+        "start": start, "end": end, "today": today, "day_count": DASHBOARD_DAYS,
+        "month": month, "month_q": f"month={month:%Y-%m}&" if month else "",
+        "prev_month": (anchor.replace(day=1) - timedelta(days=1)).replace(day=1),
+        "next_month": _next_month(month) if month and _next_month(month) <= today else None,
+        "summary": summary, "summary_months": [m["month"] for m in summary[0]["months"]]
+        if summary else [], "year_start": year_start, "year_end": year_days[-1],
     })
+
+
+def _days(start, end):
+    return [start + timedelta(days=i) for i in range((end - start).days + 1)]
+
+
+def _next_month(first):
+    return (first.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+
+def _month_param(request, today):
+    """?month=2026-09 -> 1 Sep 2026. Unreadable or still to come falls back to
+    the rolling window rather than an error page."""
+    try:
+        month = date.fromisoformat(request.GET.get("month", "") + "-01")
+    except ValueError:
+        return None
+    return month if month <= today else None
+
+
+def _month_summary(person, days, today):
+    """Working days owed, filled, partly filled and missed, per month.
+
+    Counted off the same cells the grid draws, so the two can never disagree,
+    and derived from the updates already on record, so every month that has
+    gone by is covered with no backfill.
+    """
+    months = {}
+    for cell in _coverage_row(person, days, today)["cells"]:
+        months.setdefault(cell["date"].replace(day=1), Counter())[cell["state"]] += 1
+    out = [{"month": m, "filled": n["posted"], "part": n["part"], "missed": n["missed"],
+            "owed": n["posted"] + n["part"] + n["missed"]} for m, n in months.items()]
+    total = {k: sum(m[k] for m in out) for k in ("filled", "part", "missed", "owed")}
+    # The year total rides along as the last cell, under the "Year" column.
+    return {"employee": person, "months": out, "cells": out + [total]}
 
 
 def _daily_feed(people, me, reviewed=None, who=None):

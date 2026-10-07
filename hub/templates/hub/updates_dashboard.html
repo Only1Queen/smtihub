@@ -3,11 +3,20 @@
 {% block crumb %}<b>Daily updates</b>{% endblock %}
 {% block content %}
 <h1>Daily updates</h1>
-<p class="sub">Last {{ day_count }} days · {{ start|date:"j M" }} to {{ today|date:"j M Y" }}.
+<p class="sub">{% if month %}{{ month|date:"F Y" }} · {{ start|date:"j M" }} to {{ end|date:"j M Y" }}.
+  {% else %}Last {{ day_count }} days · {{ start|date:"j M" }} to {{ today|date:"j M Y" }}.{% endif %}
   A day is green only when every task open that day got an update. Select any square
   to see which tasks were and were not reported.</p>
 
-{% if my_open %}
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin:-10px 0 18px">
+  <a href="?month={{ prev_month|date:'Y-m' }}"><button class="btn sm">‹ {{ prev_month|date:"M Y" }}</button></a>
+  {% if month %}
+    {% if next_month %}<a href="?month={{ next_month|date:'Y-m' }}"><button class="btn sm">{{ next_month|date:"M Y" }} ›</button></a>{% endif %}
+    <a href="{% url 'updates_dashboard' %}"><button class="btn sm primary">Back to last {{ day_count }} days</button></a>
+  {% endif %}
+</div>
+
+{% if my_open and not month %}
 <div class="card">
   <div class="card-head"><span class="card-title">Post today's update</span>
     <span class="card-note">against a task assigned to you — goals are not updated here</span></div>
@@ -28,7 +37,7 @@
   <div class="card-head"><span class="card-title">Coverage</span>
     <span class="card-note">weekends and days on leave are not counted as missed</span>
     <div class="spacer" style="flex:1"></div>
-    <a href="?export=csv"><button class="btn sm">Export CSV</button></a></div>
+    <a href="?{{ month_q }}export=csv"><button class="btn sm">Export CSV</button></a></div>
   <div class="tw">
     <table class="update-grid">
       <thead><tr>
@@ -86,10 +95,52 @@
 </div>
 
 <div class="card">
-  <div class="card-head"><span class="card-title">{% if can_review %}Updates to review{% else %}Updates posted{% endif %}</span>
-    <span class="card-note">newest first · {{ feed|length }} shown{% if can_review %} · reviewed ones move to <a href="{% url 'update_comments' %}">Update comments</a>{% endif %}</span>
+  <div class="card-head"><span class="card-title">Monthly summary</span>
+    <span class="card-note">{{ year_start|date:"M Y" }} to {{ year_end|date:"j M Y" }} · working days filled out of days owed · select a month to open it</span>
     <div class="spacer" style="flex:1"></div>
-    {% if can_review %}
+    <a href="?{{ month_q }}export=summary"><button class="btn sm">Export CSV</button></a></div>
+  <div class="tw">
+    <table class="update-grid">
+      <thead><tr>
+        <th class="stick">Analyst</th>
+        {% for m in summary_months %}
+          <th style="text-align:right"><a href="?month={{ m|date:'Y-m' }}">{% if m == month %}▸ {% endif %}{{ m|date:"M y" }}</a></th>
+        {% endfor %}
+        <th style="text-align:right">Year</th>
+      </tr></thead>
+      <tbody>
+      {% for row in summary %}
+        <tr>
+          <td class="stick">{{ row.employee.name }}</td>
+          {% for m in row.cells %}
+            <td class="num" style="padding:8px 10px">
+              {% if m.owed %}
+                <span class="score {% if m.filled == m.owed %}s-good{% elif m.missed %}s-bad{% else %}s-warn{% endif %}">{{ m.filled }}</span><span style="color:var(--faint)">/{{ m.owed }} filled</span>
+                {% if m.missed %}<div class="s-bad" style="font-size:11.5px">{{ m.missed }} missed</div>{% endif %}
+                {% if m.part %}<div class="s-warn" style="font-size:11.5px">{{ m.part }} part</div>{% endif %}
+              {% else %}<span class="s-none">—</span>{% endif %}
+            </td>
+          {% endfor %}
+        </tr>
+      {% empty %}
+        <tr><td colspan="99" style="text-align:center;color:var(--faint);padding:26px">Nobody to show yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="legend">
+    <span><b class="s-good">filled</b> every open task updated</span>
+    <span><b class="s-warn">part</b> some tasks not updated</span>
+    <span><b class="s-bad">missed</b> nothing posted</span>
+    <span>weekends, leave and days with nothing assigned are not owed</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><span class="card-title">{% if month %}Updates in {{ month|date:"F Y" }}{% elif can_review %}Updates to review{% else %}Updates posted{% endif %}</span>
+    <span class="card-note">newest first · {{ feed|length }} shown{% if can_review and not month %} · reviewed ones move to <a href="{% url 'update_comments' %}">Update comments</a>{% endif %}</span>
+    <div class="spacer" style="flex:1"></div>
+    {% if can_review and not month %}
       <form method="post" style="margin:0;display:flex;gap:8px">{% csrf_token %}
         <input type="hidden" name="who" value="{{ who|default:'' }}">
         <button class="btn sm primary" type="submit" name="read_all" value="read"
@@ -98,12 +149,12 @@
                 {% if not reviewed_count %}disabled{% endif %}>Mark all unread ({{ reviewed_count }})</button>
       </form>
     {% endif %}
-    <a href="?export=notes{% if who %}&amp;who={{ who }}{% endif %}"><button class="btn sm">Export CSV</button></a></div>
+    <a href="?{{ month_q }}export=notes{% if who %}&amp;who={{ who }}{% endif %}"><button class="btn sm">Export CSV</button></a></div>
   {% if people|length > 1 %}
     <div class="detail-body" style="padding-bottom:0">
-      <a href="{% url 'updates_dashboard' %}"><span class="tag mono">{% if not who %}▸ {% endif %}Everyone</span></a>
+      <a href="?{{ month_q }}"><span class="tag mono">{% if not who %}▸ {% endif %}Everyone</span></a>
       {% for p in people %}
-        <a href="?who={{ p.pk }}"><span class="tag mono">{% if who == p.pk|stringformat:"s" %}▸ {% endif %}{{ p.name }}</span></a>
+        <a href="?{{ month_q }}who={{ p.pk }}"><span class="tag mono">{% if who == p.pk|stringformat:"s" %}▸ {% endif %}{{ p.name }}</span></a>
       {% endfor %}
     </div>
   {% endif %}
@@ -123,7 +174,7 @@
           {% elif u.reviewed_at %}
             <div class="verdict ok"><b>Reviewed</b> {{ u.reviewed_at|date:"j M, H:i" }}</div>
           {% endif %}
-          {% if can_review %}
+          {% if can_review and not u.reviewed_at and u.author != me %}
             <form method="post" class="review-line">{% csrf_token %}
               <input type="hidden" name="review" value="{{ u.pk }}">
               <input type="text" name="comment" maxlength="2000"
@@ -134,7 +185,7 @@
         </div>
       </div>
     {% empty %}
-      <p class="muted">{% if can_review %}Nothing left to review.{% else %}No daily updates yet.{% endif %}</p>
+      <p class="muted">{% if month %}Nothing posted this month.{% elif can_review %}Nothing left to review.{% else %}No daily updates yet.{% endif %}</p>
     {% endfor %}
   </div>
 </div>
